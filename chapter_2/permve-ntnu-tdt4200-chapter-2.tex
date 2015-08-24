@@ -1,0 +1,131 @@
+\input{../templates/assignment.tex}
+
+\title{
+    \vspace{-1in} \usefont{OT1}{bch}{b}{n}
+    \Large \bfseries \strut TDT4200 -- Parallell Computation\\Chapter 2 -- Parallell Hardware and Parallell Software\strut \\
+}
+
+\newacro{SIMD}{Single Instruction, Multiple Data}
+\newacro{SISD}{Single Instruction, Single Data}
+\newacro{SMT}{Simultaneous Multithreading}
+\newacro{SSE}{Streaming SIMD Extensions}
+\newacro{TLB}{Translation Lookaside Buffer}
+
+\begin{document}
+\maketitle
+
+\section*{Exercises}
+
+\begin{enumerate}
+
+\item \textbf{When we were discussing floating point addition, we made the simplifying assumption that each of the functional units took the same amount of time. Suppose that fetch and store each take 2 nanoseconds and the remaining operations each take 1 nanosecond.}
+
+\begin{enumerate}
+\item \textbf{How long does a floating point addition take with these assumptions?}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+Time & Cost & Operation\\
+\hline
+0~ns & 2~ns & Fetch operands\\
+2~ns & 1~ns & Compare exponents\\
+3~ns & 1~ns & Shift one operand\\
+4~ns & 1~ns & Add\\
+5~ns & 1~ns & Normalize result\\
+6~ns & 1~ns & Round result\\
+7~ns & 2~ns & Store result\\
+\hline
+9~ns & & Floating point addition cost\\
+\hline
+\hline
+\end{tabular}
+\end{center}
+
+\item \textbf{How long will an unpipelined addition of 1000 pairs of floats take with these assumptions?}
+
+\begin{math}
+1000 * \SI{9}{ns} = \SI{9000}{ns}
+\end{math}
+
+\item \textbf{How long will a pipelined addition of 1000 pairs of floats take with these assumptions?}
+
+The pipelined additions will be limited by the speed of the fetch operation (\SI{2}{ns}). This means that the total cost to perform 1000 pipelined floating point additions will be the cost of 1000 fetch operations plus the cost of one of each of the other operations; \SI{2007}{ns} in total (see Table~\ref{table:pipelined_addition}).
+
+\begin{center}
+\begin{table}
+\begin{tabular}{cccccccc}
+\hline
+Time           & Fetch & Compare & Shift & Add & Normalize & Round & Store \\
+\hline
+\SI{   0}{ns}  & 0      &        &        &        &           &        &        \\
+\SI{   1}{ns}  & 0      &        &        &        &           &        &        \\
+\SI{   2}{ns}  & 1      & 0      &        &        &           &        &        \\
+\SI{   3}{ns}  & 1      &        & 0      &        &           &        &        \\
+\SI{   4}{ns}  & 2      & 1      &        & 0      &           &        &        \\
+\SI{   5}{ns}  & 2      &        & 1      &        & 0         &        &        \\
+\SI{   6}{ns}  & 3      & 2      &        & 1      &           & 0      &        \\
+\SI{   7}{ns}  & 3      &        & 2      &        & 1         &        & 0      \\
+\vdots         & \vdots & \vdots & \vdots & \vdots & \vdots    & \vdots & \vdots \\
+\SI{1999}{ns}  & 999    &        & 998    &        & 997       &        & 996    \\
+\SI{2000}{ns}  &        & 999    &        & 998    &           & 997    & 996    \\
+\SI{2001}{ns}  &        &        & 999    &        & 998       &        & 997    \\
+\SI{2002}{ns}  &        &        &        & 999    &           & 998    & 997    \\
+\SI{2003}{ns}  &        &        &        &        & 999       &        & 998    \\
+\SI{2004}{ns}  &        &        &        &        &           & 999    & 998    \\
+\SI{2005}{ns}  &        &        &        &        &           &        & 999    \\
+\SI{2006}{ns}  &        &        &        &        &           &        & 999    \\
+\hline
+\end{tabular}
+\caption{Pipelined addition with non-uniform operation costs. The numbers in the table is the index of each floating point addition sequence.}
+\label{table:pipelined_addition}
+\end{table}
+\end{center}
+
+\end{enumerate}
+
+
+\item \textbf{In Table 2.2, virtual addresses consist of a byte offset of 12 bits and a virtual page number of 20 bits. How many pages can a program have if it's run on a system with this page size and this virtual address size?}
+
+Given a virtual page number of 20 bits the total number of pages a program can have is $2^{20} = 1048576$.
+
+\item \textbf{Does the addition of cache and virtual memory to a von~Neumann system change its designation as an SISD system? What about the addition of pipelining? Multiple issue? Hardware multithreading?}
+
+In Flynn's taxonomy, SISD refers to a \aclu{SISD} system. The addition of caching to a von~Neumann system improves the average memory lookup costs by providing a faster memory which can hold some of the most active data. Virtual memory support through a \ac{TLB} assists the system in translating virtual addresses to physical addresses. Neither caching nor a \ac{TLB} changes the \ac{SISD} nature of a system since they don't affect the number of instruction or data streams.
+
+An instruction pipeline will improve the speed of some sequences of operations by splitting the sequence into steps which can be executed concurrently. Although it introduces concurrent processing, an instruction pipeline can still be found in \ac{SISD} systems as the system still operates on a single instruction and single data stream, even if the executed operations occur concurrently.
+
+Multiple issue adds functional units to a system such that it can execute different operations simultaneously. A system can support both static and dynamic multiple issue. With static multiple issue, the scheduling of how to use functional units is done at compile time. An example of static multiple issue is \ac{SSE} which adds several new registers to a system and allows performing multiple calculations simultaneously. Such a static multiple issue feature would make the system \ac{SIMD}. With dynamic multiple issue, also knows as a superscalar system, the instruction dispatcher decides dynamically which instructions can be executed simultaneously. A system can support dynamic multiple issue while still being \ac{SISD}, however most superscalar systems also support vector operations which makes them \ac{SIMD} systems. 
+
+Hardware multithreading allows a system to weave the execution of multiple threads. This can either be done in a fine-grained fashion, where the system switches between executing each thread for each executed instruction while skipping stalled treads, or in a coarsely-grained fashion where the system only switches from one thread to the next when the current thread has stalled. It can also be achieved through \ac{SMT}, also known by the term \textit{Hyper-threading} as used by Intel. With \ac{SMT}, the system weaves the execution of two or more threads into the same instruction pipeline to best utilize the available functional units. Since these hardware multithreading techniques can all be used on a single instruction pipeline, they do not change the system taxonomy which can still be \ac{SISD}.
+
+\item \textbf{Suppose that a vector processor has a memory system in which it takes 10 cycles to load a single 64-bit word from memory. How many memory banks are needed so that a stream of loads can, on average, require only one cycle per load?}
+
+By modifying the scenario to use a 2 cycle/load cost we can construct a table, see Table~\ref{table:memory_bank_loading}, showing how the memory load sequence must be set up if we desire a new value available for every clock cycle on average. This shows us that the required number of memory banks will be:
+
+\begin{math}
+\mathit{MemoryBankCount} = \mathit{MemoryLoadCycleCost} + 1 = 10 + 1 = 11
+\end{math}
+
+\begin{center}
+\begin{table}
+\begin{tabular}{clll}
+\hline
+Cycle & Memory bank 0               & Memory bank 1              & Memory bank 2\\
+\hline
+0     & Begin load (2 cycles left)  &                            & \\
+1     & Loading (1 cycles left)     & Begin load (2 cycles left) & \\
+2     & Value available             & Loading (1 cycle left)     & Begin load (2 cycles left \\
+3     &                             & Value available            & Loading (1 cycle left) \\
+4     &                             &                            & Value available\\
+\hline
+\end{tabular}
+\caption{Memory bank loading sequence}
+\label{table:memory_bank_loading}
+\end{table}
+\end{center}
+
+\end{enumerate}
+
+\end{document}
+
