@@ -3,13 +3,14 @@ project(hello_world)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 
-#SET(CMAKE C COMPILER mpicc)
-#SET(CMAKE CXX COMPILER mpicxx)
+SET(CMAKE C COMPILER mpicc)
+SET(CMAKE CXX COMPILER mpicxx)
 
-find_package(MPI REQUIRED)
-set(CMAKE_CXX_COMPILE_FLAGS ${CMAKE_CXX_COMPILE_FLAGS} ${MPI_COMPILE_FLAGS})
-set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
-include_directories(${MPI_INCLUDE_PATH})
+#find_package(MPI REQUIRED)
+#set(CMAKE_CXX_COMPILE_FLAGS ${CMAKE_CXX_COMPILE_FLAGS} ${MPI_COMPILE_FLAGS})
+#set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
+#include_directories(${MPI_INCLUDE_PATH})
+include_directories(/sw/sgi/mpt/mpt-2.06/include/)
 
 add_executable(hello_world hello_world.cpp)
 target_link_libraries(hello_world ${MPI_LIBRARIES})
