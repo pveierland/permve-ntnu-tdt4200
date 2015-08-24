@@ -20,7 +20,7 @@ find_package(Boost REQUIRED COMPONENTS mpi serialization)
 
 include_directories(${Boost_INCLUDE_DIR})# ${MPI_INCLUDE_PATH})
 add_executable(hello_world hello_world.cpp)
-target_link_libraries(hello_world ${Boost_LIBRARIES}#) ${MPI_LIBRARIES})
+target_link_libraries(hello_world ${Boost_LIBRARIES})# ${MPI_LIBRARIES})
 
 enable_testing()
 add_test(hello_world ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} 4 ${CMAKE_CURRENT_BINARY_DIR}/hello_world)
