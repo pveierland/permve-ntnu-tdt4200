@@ -26,5 +26,7 @@ find_package(Boost REQUIRED COMPONENTS mpi serialization)
 
 include_directories(${Boost_INCLUDE_DIR})
 add_executable(parallel computeMPI.cpp)
+add_executable(parallel2 mach2.cpp)
 target_link_libraries(parallel ${Boost_LIBRARIES} ${MPI_LIBRARIES})
+target_link_libraries(parallel2 ${Boost_LIBRARIES} ${MPI_LIBRARIES})
 
