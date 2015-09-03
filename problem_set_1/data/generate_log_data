@@ -1,0 +1,7 @@
+#!/bin/bash
+
+BASEDIR=$(dirname $0)
+
+../benchmarks/log_base_e 10 1000000000 10 10000000 > log_base_e.txt
+../benchmarks/log_base_two 10 1000000000 10 10000000 > log_base_two.txt
+

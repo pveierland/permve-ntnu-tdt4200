@@ -96,6 +96,6 @@ main(const int argc, const char* argv[])
 
     const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
 
-    std::printf("microseconds = %ld\n", nanoseconds, sum);
+    std::printf("%ld %f\n", nanoseconds, sum);
 }
 
