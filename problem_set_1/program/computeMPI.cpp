@@ -18,44 +18,86 @@ namespace
     }
 }
 
-/**
- * Given a node index, node count and half-open range described
- * by a start and stop index; calculate the start and stop index
- * relative to a given node.
- *
- * @param node_index       Zero-based node index [0..inf)
- * @param node_count       Total number of nodes [1..inf)
- * @param total_node_range Half-open range shared by all nodes
- *
- * @return Pair with first (inclusive) and last (exclusive) indexes
- *         relative to specified node.
- *
- * @pre node_index >= 0
- * @pre node_count > node_index
- * @pre total_node_range.second >= total_node_range.first
- */
-std::pair<int, int>
-calculate_node_range(const int                 node_index,
-                     const int                 node_count,
-                     const std::pair<int, int> total_node_range)
+double
+sum_inverse_log_skip_multiples_of_two(
+    const int node_index, const int node_count, const int start, const int stop)
 {
-    const int total_calculations            = total_node_range.second - total_node_range.first;
-    const int minimum_calculations_per_node = total_calculations / node_count;
+    double sum = 0.0;
 
-    const int remaining_calculations =
-        total_calculations - node_count * minimum_calculations_per_node;
+    int end_point = stop;
 
-    const int this_node_start =
-        total_node_range.first +
-        minimum_calculations_per_node * node_index +
-        std::min(remaining_calculations, node_index);
+    double log_of_two = std::log2(2.0);
+    double log_of_e   = std::log2(std::exp(1.0));
 
-    const int this_node_calculations =
-        minimum_calculations_per_node +
-        ((node_index + 1 <= remaining_calculations) ? 1 : 0);
+    while (true)
+    {
+        // Divide mid-point and start-point by 2:
+        int mid_point = end_point >> 1;
+        int start_point = mid_point >> 1;
 
-    return std::make_pair(this_node_start,
-                          this_node_start + this_node_calculations);
+        bool is_midpoint_odd = mid_point & 1;
+
+        mid_point &= ~1;
+
+        if (start_point < start || ((mid_point - start_point) < 2 * node_count))
+        {
+            // Not possible to split remaining data. Revert to plain iteration.
+            const int per_node = (end_point - start) / node_count;
+
+            int node_start = start + per_node * node_index;
+            int node_end = node_start + per_node;
+
+            if (node_index == node_count - 1)
+            {
+                node_end = end_point;
+            }
+                
+            for (int x = node_start; x != node_end; ++x)
+            {
+                sum += log_of_e / std::log2(static_cast<double>(x));
+            }
+            
+            return sum;
+        }
+        else
+        {
+            const int per_node = (mid_point - start_point) / node_count;
+
+            int node_start = start_point + per_node * node_index;
+            int node_end = node_start + per_node;
+            
+            if (node_index == node_count - 1)
+            {
+                node_end = mid_point;
+            
+                for (int x = node_start; x != node_end; ++x)
+                {
+                    const auto l = std::log2(static_cast<double>(x));
+                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(static_cast<double>(2 * x + 1));
+                }
+
+                if (is_midpoint_odd)
+                {
+                    sum += log_of_e / std::log2(static_cast<double>(2 * node_end)) + log_of_e / std::log2(static_cast<double>(2 * node_end + 1));
+                }
+            }
+            else
+            {
+                for (int x = node_start; x != node_end; ++x)
+                {
+                    const auto l = std::log2(static_cast<double>(x));
+                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(static_cast<double>(2 * x + 1));
+                }
+            }
+
+            if (end_point & 1 && node_index == 0)
+            {
+                sum += log_of_e / std::log2(static_cast<double>(end_point - 1));
+            }
+
+            end_point = start_point;
+        }
+    } 
 }
 
 std::pair<int, int>
@@ -91,16 +133,10 @@ main(const int argc, const char* argv[])
 
     try
     {
-        const auto total_nodes_range = read_user_input(argc, argv);
-        const auto this_node_range   = calculate_node_range(world.rank(), world.size(), total_nodes_range);
-    
-        double this_node_sum = 0.0;
-    
-        for (auto i = this_node_range.first; i != this_node_range.second; ++i)
-        {
-            this_node_sum += 1.0 / std::log(static_cast<double>(i));
-        }
-    
+        const auto start_stop = read_user_input(argc, argv);
+
+        const auto this_node_sum = sum_inverse_log_skip_multiples_of_two(
+            world.rank(), world.size(), start_stop.first, start_stop.second);
     
         if (is_master)
         {

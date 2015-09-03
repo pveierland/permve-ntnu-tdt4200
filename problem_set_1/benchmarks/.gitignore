@@ -1,3 +1,9 @@
-/log_double
-/log_magic
+/log_base_e
+/log_base_two
+/sum_inverse_log_basic_double
+/sum_inverse_log_basic_integral
+/sum_inverse_log_basic_unrolled
+/sum_inverse_log_skip_multiples_of_two
+/sum_inverse_log_two_basic
+/sum_inverse_log_two_unrolled
 

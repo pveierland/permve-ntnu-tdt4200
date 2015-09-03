@@ -20,7 +20,7 @@ main(const int argc, const char* argv[])
 
         for (int i = 0; i != iterations; ++i)
         {
-            volatile auto x = std::log2(n);
+            volatile auto x = std::log2(static_cast<double>(n));
         }
 
         const auto t2 = std::chrono::system_clock::now();

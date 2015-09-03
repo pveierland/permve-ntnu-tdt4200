@@ -10,8 +10,8 @@ sum_inverse_log_skip_multiples_of_two(
 
     int end_point = stop;
 
-    double log_of_two = std::log2(2);
-    double log_of_e   = std::log2(std::exp(1));
+    double log_of_two = std::log2(2.0);
+    double log_of_e   = std::log2(std::exp(1.0));
 
     while (true)
     {
@@ -38,7 +38,7 @@ sum_inverse_log_skip_multiples_of_two(
                 
             for (int x = node_start; x != node_end; ++x)
             {
-                sum += log_of_e / std::log2(x);
+                sum += log_of_e / std::log2(static_cast<double>(x));
             }
             
             return sum;
@@ -56,27 +56,27 @@ sum_inverse_log_skip_multiples_of_two(
             
                 for (int x = node_start; x != node_end; ++x)
                 {
-                    const auto l = std::log2(x);
-                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(2 * x + 1);
+                    const auto l = std::log2(static_cast<double>(x));
+                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(static_cast<double>(2 * x + 1));
                 }
 
                 if (is_midpoint_odd)
                 {
-                    sum += log_of_e / std::log2(2 * node_end) + log_of_e / std::log2(2 * node_end + 1);
+                    sum += log_of_e / std::log2(static_cast<double>(2 * node_end)) + log_of_e / std::log2(static_cast<double>(2 * node_end + 1));
                 }
             }
             else
             {
                 for (int x = node_start; x != node_end; ++x)
                 {
-                    const auto l = std::log2(x);
-                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(2 * x + 1);
+                    const auto l = std::log2(static_cast<double>(x));
+                    sum += log_of_e / l + log_of_e / (log_of_two + l) + log_of_e / std::log2(static_cast<double>(2 * x + 1));
                 }
             }
 
             if (end_point & 1 && node_index == 0)
             {
-                sum += log_of_e / std::log2(end_point - 1);
+                sum += log_of_e / std::log2(static_cast<double>(end_point - 1));
             }
 
             end_point = start_point;
