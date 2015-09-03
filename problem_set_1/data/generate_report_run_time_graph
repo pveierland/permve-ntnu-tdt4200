@@ -8,7 +8,7 @@ function benchmark {
     for ((i=1; i<=20; i++)); do
         B=$(echo "$start + $i * ($stop - $start) / 20" | bc)
         echo "Going from $start to $B"
-        mpirun -np $P ${BASEDIR}/../program/parallel $start $B >> run_time_${P}_${start}_${stop}.txt
+        mpirun -np $P ${BASEDIR}/../program/parallel $start $B | awk "{ print $B,"'$1,$2; }' >> run_time_${P}_${start}_${stop}.txt
     done
 }
 
