@@ -3,6 +3,7 @@
 
 #include <boost/mpi.hpp>
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -134,6 +135,8 @@ main(const int argc, const char* argv[])
     try
     {
         const auto start_stop = read_user_input(argc, argv);
+        
+        const auto t1 = std::chrono::system_clock::now();
 
         const auto this_node_sum = sum_inverse_log_skip_multiples_of_two(
             world.rank(), world.size(), start_stop.first, start_stop.second);
@@ -151,8 +154,12 @@ main(const int argc, const char* argv[])
                 world.recv(boost::mpi::any_source, config::result_tag, received_node_sum);
                 total_node_sum += received_node_sum;
             }
-    
-            std::printf("The sum is: %f\n", total_node_sum);
+            
+            const auto t2 = std::chrono::system_clock::now();
+
+            const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+            
+            std::printf("%ld %f\n", nanoseconds, total_node_sum);
         }
         else
         {

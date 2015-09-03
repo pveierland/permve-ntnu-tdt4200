@@ -1,0 +1,13 @@
+#!/bin/bash
+
+BASEDIR=$(dirname $0)
+
+valgrind --tool=callgrind --callgrind-out-file=${BASEDIR}/sum_inverse_log_basic_double.callgrind ${BASEDIR}/../benchmarks/sum_inverse_log_basic_double 2 10000002
+gprof2dot -f callgrind ${BASEDIR}/sum_inverse_log_basic_double.callgrind | dot -Tpng -o sum_inverse_log_basic_double.png
+
+valgrind --tool=callgrind --callgrind-out-file=${BASEDIR}/sum_inverse_log_basic_unrolled.callgrind ${BASEDIR}/../benchmarks/sum_inverse_log_basic_unrolled 2 10000002
+gprof2dot -f callgrind ${BASEDIR}/sum_inverse_log_basic_unrolled.callgrind | dot -Tpng -o sum_inverse_log_basic_unrolled.png
+
+valgrind --tool=callgrind --callgrind-out-file=${BASEDIR}/sum_inverse_log_two_basic.callgrind ${BASEDIR}/../benchmarks/sum_inverse_log_two_basic 2 10000002
+gprof2dot -f callgrind ${BASEDIR}/sum_inverse_log_two_basic.callgrind | dot -Tpng -o sum_inverse_log_two_basic.png
+
