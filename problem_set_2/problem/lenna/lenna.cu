@@ -12,7 +12,7 @@ int main( int argc, char ** argv){
   unsigned char *image;
   unsigned int width, height;
   /* Decode it into a RGB 8-bit per channel vector */
-  unsigned int error = lodepng_decode32(&image, &width, &height, png, pngsize);
+  unsigned int error = lodepng_decode24(&image, &width, &height, png, pngsize);
 
   /* Check if read and decode of .png went well */
   if(error != 0){
