@@ -1,0 +1,85 @@
+\input{../../templates/assignment.tex}
+
+\title{	
+\normalfont \normalsize 
+\textsc{Norwegian University of Science and Technology\\TDT4200 -- Parallel Computing} \\ [25pt]
+\horrule{0.5pt} \\[0.4cm]
+\huge Problem Set 2:\\ CUDA Intro\\
+\horrule{2pt} \\[0.5cm]
+}
+
+\author{Per Magnus Veierland\\permve@stud.ntnu.no}
+
+\setlist[enumerate,1]{label=\emph{\alph*})}
+\setlist[enumerate,2]{label=\roman*)}
+\setlist[enumerate,3]{label=\arabic*)}
+
+\date{\normalsize\today}
+
+\newacro{CUDA}{Compute Unified Device Architecture}
+
+\begin{document}
+\maketitle
+
+\section*{Part 1: Theory}
+
+\subsection*{Problem 1: Problem 1, Architectures \& Programming Models}
+
+\begin{enumerate}
+
+\item \textbf{Briefly explain the differences between the following architectures:\\
+Keywords being: Homogeneous cores, heterogeneous cores, clusters, NUMA, threads.}
+
+\begin{enumerate}
+\item Nvidia Maxwell
+\item ARM big.LITTLE
+\item Vilje @ NTNU
+\item Typical modern-day CPU
+\end{enumerate}
+
+\item \textbf{Explain Nvidia's SIMT addition to Flynn's Taxonomy, and how it is realized, if at all, in each of the architectures from a).}
+
+\item \textbf{For each architecture from a), report which classification from Flynn's Taxonomy is best suited. If applicable, also state if the architecture fits Nvidia's SIMT-classification. Give the reasoning(s) behind your answers.}
+
+\end{enumerate}
+
+\subsection*{Problem 2: CUDA GPGPUs}
+
+\begin{enumerate}
+
+\item \textbf{Explain the terms \textit{Threads}, \textit{Grids}, \textit{Blocks}, and how they relate to one another (if at all).}
+
+\item \textbf{Consider an algorithm whose input has size $2n$, output has size $5n$, and execution time is $5hn \cdot 7h \cdot \log_2(n)$ where $h = 1$ on the GPU and $h = 10$ on the CPU. The CPU-GPU bus has a bandwidth of $r$. How big must $n$ be before it is faster to run the dataset with the algorithm detailed on the GPU instead of the CPU?}
+
+\item \textbf{Which of \texttt{kernel1()} and \texttt{kernel2()} will execute fastest, given that $X$ and $Y$ are \textit{gridDim} and \textit{blockDim} respectively, containing $3$ integers with positive powers of $2$ higher than $2^4$?}
+
+\item \textbf{Explain each of the following terms, and how each should be utilized for maximum effect in a CUDA program:}
+
+\begin{enumerate}
+\item Warps
+\item Occupancy
+\item Memory Coalescing
+\item Local Memory
+\item Shared Memory
+\end{enumerate}
+
+\end{enumerate}
+
+\section*{Part 2: Code}
+
+\subsection*{Problem 1: CUDA Intro}
+
+\begin{enumerate}
+
+\item \textbf{In the CUDA file \texttt{lenna.cu} implement a kernel which performs the same job as the executable \texttt{cpu\_version} does. The additionally required setup of memory and variables, freeing of the same, and transfers wrt. to the CUDA kernel are also required.}
+
+\item \textbf{Implement a \texttt{make cuda} makefile rule which compiles (but does not execute) the CUDA executable \texttt{gpu\_version}.}
+
+\item \textbf{Time the transfers of data to and from device, and report the percentage of total program run-time the transfers require. How would you suggest to improve this percentage?}
+
+\end{enumerate}
+
+\subsection*{Problem 2: Pinkfloyd Intro}
+
+\end{document}
+
