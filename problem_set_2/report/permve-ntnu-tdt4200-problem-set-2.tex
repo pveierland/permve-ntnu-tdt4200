@@ -17,6 +17,8 @@
 \date{\normalsize\today}
 
 \newacro{CUDA}{Compute Unified Device Architecture}
+\newacro{GPU}{Graphics Processor Unit}
+\newacro{SM}{Streaming Multi-processor}
 
 \begin{document}
 \maketitle
@@ -49,7 +51,94 @@ Keywords being: Homogeneous cores, heterogeneous cores, clusters, NUMA, threads.
 
 \item \textbf{Explain the terms \textit{Threads}, \textit{Grids}, \textit{Blocks}, and how they relate to one another (if at all).}
 
+\begin{itemize}
+
+\item In a \ac{CUDA} architecture a \textit{thread} represents one distinct execution of a kernel. A kernel is a general-purpose program running on the \ac{GPU} and can be executed by a large number of threads simultaneously. Each thread has its own registers, program counter and private memory. 
+
+\item A \textit{block} is a collection of threads which is executed on a single \ac{SM}. Each block has a very fast local memory which the threads within the block can use to exchange data. Threads in a block can also synchronize their execution with a special barrier mechanism.
+
+The \textit{number of threads per block} is specified at runtime when launching a kernel. As a convenience it is implemented as a 3-dimensional vector, where the threads for each block can be organized into 1, 2, or 3 dimensions according to what best describes the problem. The built-in variable \texttt{threadIdx} has a unique value available to each \ac{CUDA} thread specifying its \textit{X-Y-Z} index within the block.
+
+For Maxwell, the maximum number of threads per block is $1024$, the maximum number of threads in the X-dimension for a block is $2^{32}-1$, and the maximum number of threads in the Y- and Z-dimensions is $65535$.
+
+\item When launching a kernel, both the \textit{number of blocks} and the \textit{number of threads per block} is specified at runtime. The set of blocks instantiated for a launched kernel is known as a \textit{grid}.
+
+The \textit{number of blocks} is also given as a 3-dimensional which can be used according to what best describes the problem. The built-in variable \texttt{blockIdx} provides the \textit{X-Y-Z} index of the block which a \ac{CUDA} thread is part of.
+
+For Maxwell, the maximum number of blocks in the X- and Y-dimension of a grid is $1024$, and the maximum number of blocks in the Z-dimension of a grid is $64$.
+
+\end{itemize}
+
+%SIMT = Multiple threads execute concurrently using single instruction.
+%Each thread has per-thread private local memory.
+%Each thread block has per-block shared memory.
+%Each grid has per-application global memory.
+%
+%Each thread within a thread block executes an instance of the kernel, and has a thread ID within its thread block, program counter, registers, per-thread private memory, inputs and output results.
+%
+%A thread block is a set of concurrently executing threads that can cooperate among themselves through barrier synchronization and shared memory. A thread block has a block ID within its grid.
+%
+%A grid is an array of thread blocks that execute the same kernel, read inputs from global memory, write results to global memory, and synchronize between dependent kernel calls.  
+%A GPU executes one or more kernel grids; a streaming multiprocessor executes one or more thread blocks; and CUDA cores and other execution units in the SM executes threads. The SM executes threads in groups of 32 threads called a warp. Can greatly improve performance by having all threads in a warp execute same code path and access memory in nearby addresses.
+%
+%A CUDA core executes a floating point or integer instruction per clock for a thread. 
+%
+%All threads in a grid execute the same kernel function.
+%
+%Each thread has registers and local memory.
+%
+%The GigaThread global scheduler distributes thread blocks to SM thread schedulers.
+%
+%The SM schedules threads in groups of 32 parallel threads called warps. Each SM features two warp schedulers and two instruction dispatch units, allowing two warps to be issued and executed concurrently. 
+%
+%Each Streaming Multiprocessor has multiple processing cores.
+%For Fermi each SM contains 32 processing cores.
+%AKA ``CUDA cores''.
+%These cores execute in a Single Instruction Multiple Thread fashion.
+%Up to 16 SMs on a card for a maximum of 512 compute cores.
+%A grid is composed of blocks which are completely independent.
+%A block is composed of threads which can communicate within their own block.
+%32 threads for a warp. Instructions are issued per warp. If an operand is not ready, the warp will stall. Context switching occurs between warps when stalled.
+%
+%Registers and shared memory are allocated for a block as long as that block is alive. Once a block is active it will stay active until all threads in that block have completed. Context switching is very fast because registers and shared memory do not need to be saved and restored.
+%
+%Fermi can have up to 48 active warps per SM (1536 threads).
+%
+%Occupancy = Active warps / Maximum active warps
+%
+%Occupancy can be limited by register usage. Active threads = Register memory per SM / (Registers per thread) = X threads. X threads / 1536 = occupancy
+%
+%Occupancy can be limited by shared memory usage: Given 48K shared memory and each kernel uses 32 bytes of shared memory per thread. 48K/32=1536 threads. Occupancy = 1
+%
+%Occupancy limiter: Each SM can have up to 8 active blocks. A small block size will limit the number of threads. Active threads = blockSize * maxblocks
+%
+%If the kernel is bandwidth bound: Attempt to increase occupancy. Use occupancy calculator.
+%
+%Threads can efficiently communicate and synchronize between each other; blocks cannot. Within a block, threads share data via local shared memory by using the declaration \texttt{\_\_shared\_\_} which is allocated per block. This data is not visible to threads in other blocks. Device memory is global memory. \textit{\_\_syncthreads()} can be used as a barrier to synchronize threads within a block. All threads must reach the barrier.
+
+%__global__ is a CUDA kernel which can be called from host and from device
+%__device__ is a CUDA kernel which can only be called from the device
+
+%compute capability describes feature set of CUDA device. Number of registers, sizes of memories, features and capabilities.
+
+%N blocks with M threads per block is launched with \texttt{kernel\textless \textlessi \textless{}N,M\textgreater \textgreater \textgreater ($\ldots$)}. Kernel launches are asynchronous.
+
+% cudaMemcpy blocks CPU until copy is complete.
+% cudaMemcpyAsync does not block CPU
+% cudaDeviceSynchronize blocks CPU until all CUDA calls have completed
+
+% blockIdx gives the block index within the grid
+% threadIdx gives the grid index within the block
+% blockDim gives the dimensions within each box
+% gridDim gives the dimensions within the grid
+% both blockIdx and threadIdx are 3-D
 \item \textbf{Consider an algorithm whose input has size $2n$, output has size $5n$, and execution time is $5hn \cdot 7h \cdot \log_2(n)$ where $h = 1$ on the GPU and $h = 10$ on the CPU. The CPU-GPU bus has a bandwidth of $r$. How big must $n$ be before it is faster to run the dataset with the algorithm detailed on the GPU instead of the CPU?}
+
+%\begin{tikzpicture}
+%\draw[->] (0,0) -- (4.2,0) node[right] {$n$};
+%\draw[->] (0,0) -- (0,4.2) node[above] {$T$};
+%\draw[scale=0.1,domain=0:3,smooth,variable=\n,blue] plot ({\n},{5*\n*7}); % GPU
+%\end{tikzpicture}
 
 \item \textbf{Which of \texttt{kernel1()} and \texttt{kernel2()} will execute fastest, given that $X$ and $Y$ are \textit{gridDim} and \textit{blockDim} respectively, containing $3$ integers with positive powers of $2$ higher than $2^4$?}
 
