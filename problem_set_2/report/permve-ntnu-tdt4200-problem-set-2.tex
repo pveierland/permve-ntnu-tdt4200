@@ -18,7 +18,12 @@
 
 \newacro{CUDA}{Compute Unified Device Architecture}
 \newacro{GPU}{Graphics Processor Unit}
+\newacro{NUMA}{Nonuniform memory access}
+\newacro{SGI}{Silicon Graphics International}
+\newacro{SIMT}{Single Instruction Multiple Thread}
+\newacro{SMT}{Simultaneous Multi-threading}
 \newacro{SM}{Streaming Multi-processor}
+\newacro{UMA}{Uniform memory access}
 
 \begin{document}
 \maketitle
@@ -33,9 +38,21 @@
 Keywords being: Homogeneous cores, heterogeneous cores, clusters, NUMA, threads.}
 
 \begin{enumerate}
-\item Nvidia Maxwell
+\item \textit{Nvidia Maxwell} is the latest generation \ac{GPU} architecture from Nvidia. Their \ac{GPU} architecture is highly parallel, with a chip such as the GM204 having 16 \acp{SM} split into 4 distinct \ac{CUDA} processing blocks, each containing 32 homogeneous \ac{CUDA} cores. In total the GM204 chip has 2048 \ac{CUDA} processing cores.
+
+Within each \textit{processing block} (not to be mixed with \textit{thread block}) there is a register file which is shared by the processing cores and is used for thread register storage and thread local storage. All processing blocks within an \ac{SM} has one L1/texture cache as well as a shared memory. All \acp{SM} share a common L2 cache. There is no L3 cache. For each memory; the thread private memory, the \ac{SM} shared memory, and the external global memory; there is equal access time for all users, so the architecture has uniform memory access.
+
+Threads in a \ac{CUDA} system are used to execute kernel programs. Each thread has its own program counter, registers and thread local storage. This data is stored in the processing block's register file. Threads are organized into \textit{thread blocks} by the application. The \ac{GPU} global \textit{GigaThread Engine} schedules thread blocks onto \acp{SM}. Within an \ac{SM} threads are executed as part of warps. A \textit{warp} is a collection of 32 threads which is executed simultaneously. The GM204 chip has 4 \textit{warp schedulers} per \ac{SM} which each can dispatch two instructions per warp per clock cycle. Since there is no register state within the processing cores, only in the register file, the \ac{SM} can immediately switch between executing different warps without any context switch cost. When executing a warp every processing core must execute the same instruction. This is what makes the architecture \ac{SIMT}; there is a single instruction being executed by multiple threads simultaneously. 
+
 \item ARM big.LITTLE
-\item Vilje @ NTNU
+\item \textit{Vilje @ NTNU} is a \ac{SGI} Altix ICE X system composed of a cluster of 1404 nodes connected by an Infiniband interconnect which is used for communication between nodes.
+
+Each node in the system consists of two Intel Xeon ``Sandy Bridge'' processors bridged with an Intel QuickPath interconnect. Both processors has a separate 16~GB memory which they can access directly. In addition, each processor can access the memory connected to the other processor through the Intel QuickPath interconnect. This makes it a \ac{NUMA} architecture. The advantage is that each processor can access their own memory faster they would be able to access a single shared memory used by both processors; while still being able to take advantage of shared-memory programming by having access to the other processor's memory as well.
+
+The Intel Xeon E5-2670 processors used for each node has eight homogeneous cores each for a total of 16 processing cores per node. Each processing core has a dedicated L1 (32~KB) and L2 (256~KB) cache. The L3 (20~MB) cache is shared between all cores in the processor.
+
+The processor cores supports \ac{SMT}, also known by the term \textit{Hyper-threading} used by Intel, which allows a single physical processor core to simultaneously execute two logical threads. This is possible because each processor core is able to hold the state for two threads simultaneously and weaves their execution through a shared instruction pipeline. This technique helps the processor core better utilize all of its functional units, leading to more efficient execution.
+
 \item Typical modern-day CPU
 \end{enumerate}
 
@@ -55,19 +72,27 @@ Keywords being: Homogeneous cores, heterogeneous cores, clusters, NUMA, threads.
 
 \item In a \ac{CUDA} architecture a \textit{thread} represents one distinct execution of a kernel. A kernel is a general-purpose program running on the \ac{GPU} and can be executed by a large number of threads simultaneously. Each thread has its own registers, program counter and private memory. 
 
-\item A \textit{block} is a collection of threads which is executed on a single \ac{SM}. Each block has a very fast local memory which the threads within the block can use to exchange data. Threads in a block can also synchronize their execution with a special barrier mechanism.
+\item A \textit{block} is a collection of threads executing the same kernel on a single \ac{SM}. Each block has a very fast local memory which the threads within the block can use to exchange data. Blocks can be executed in any order. All threads in a block will not necessary execute at the same time; see the description of warps in the answer to question \textit{2d}. Threads in a block can synchronize their execution with a special barrier mechanism.
 
-The \textit{number of threads per block} is specified at runtime when launching a kernel. As a convenience it is implemented as a 3-dimensional vector, where the threads for each block can be organized into 1, 2, or 3 dimensions according to what best describes the problem. The built-in variable \texttt{threadIdx} has a unique value available to each \ac{CUDA} thread specifying its \textit{X-Y-Z} index within the block.
+The \textit{number of threads per block} is specified at runtime when launching a kernel. As a convenience it is implemented as a 3-dimensional vector, where the threads for each block can be organized into 1, 2, or 3 dimensions according to what best describes the problem. The built-in variable \texttt{threadIdx} has a unique value available to each \ac{CUDA} thread specifying its \textit{X-Y-Z} index within the block. The built-in variable \texttt{blockDim} specifies the dimensions of the block.
 
 For Maxwell, the maximum number of threads per block is $1024$, the maximum number of threads in the X-dimension for a block is $2^{32}-1$, and the maximum number of threads in the Y- and Z-dimensions is $65535$.
 
 \item When launching a kernel, both the \textit{number of blocks} and the \textit{number of threads per block} is specified at runtime. The set of blocks instantiated for a launched kernel is known as a \textit{grid}.
 
-The \textit{number of blocks} is also given as a 3-dimensional which can be used according to what best describes the problem. The built-in variable \texttt{blockIdx} provides the \textit{X-Y-Z} index of the block which a \ac{CUDA} thread is part of.
+The \textit{number of blocks} is also given as a 3-dimensional which can be used according to what best describes the problem. The built-in variable \texttt{blockIdx} provides the \textit{X-Y-Z} index of the block which a \ac{CUDA} thread is a part of. The built-in variable \texttt{gridDim} specifies the dimensions of the associated grid.
 
 For Maxwell, the maximum number of blocks in the X- and Y-dimension of a grid is $1024$, and the maximum number of blocks in the Z-dimension of a grid is $64$.
 
 \end{itemize}
+
+Figure \ref{figure:gridblock} shows that a \textit{block} is composed of a set of \textit{threads}, that a \textit{grid} is composed of a set of \textit{blocks}, and that there is a separate \textit{grid} per \textit{kernel} executed on the \textit{device}.
+
+\begin{figure}[p]
+\includegraphics[width=\linewidth]{images/gridblock}
+\caption{Organizational view showing how kernels, grids, blocks and threads are related in a \ac{CUDA} \ac{GPU} architecture. Source: ``Performance potential for simulating spin models on GPU'' by Martin Weigel 2011 (http://inspirehep.net/record/883697?ln=en).}
+\label{figure:gridblock}
+\end{figure}
 
 %SIMT = Multiple threads execute concurrently using single instruction.
 %Each thread has per-thread private local memory.
