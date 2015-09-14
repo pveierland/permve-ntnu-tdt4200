@@ -2,10 +2,11 @@
 #include <cuda_runtime.h>
 
 #include <cstddef>
+#include <cstdio>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <cstdio>
+#include <sys/time.h>
 
 #define cuda_call(f, ...) \
     cuda_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
@@ -35,15 +36,30 @@ cuda_print_function_attributes(const char* func_name, const void* func)
 {
     cudaFuncAttributes attr;
     cuda_call(cudaFuncGetAttributes, &attr, func);
+
     std::cout << func_name << " cudaFuncAttributes"                   << std::endl;
     std::cout << "  binaryVersion      : " << attr.binaryVersion      << std::endl;
-//    std::cout << "  cacheModeCA        : " << attr.cacheModeCA        << std::endl;
     std::cout << "  constSizeBytes     : " << attr.constSizeBytes     << std::endl;
     std::cout << "  localSizeBytes     : " << attr.localSizeBytes     << std::endl;
     std::cout << "  maxThreadsPerBlock : " << attr.maxThreadsPerBlock << std::endl;
     std::cout << "  numRegs            : " << attr.numRegs            << std::endl;
     std::cout << "  ptxVersion         : " << attr.ptxVersion         << std::endl;
     std::cout << "  sharedSizeBytes    : " << attr.sharedSizeBytes    << std::endl;
+}
+
+unsigned long
+get_wall_time()
+{
+    struct timeval time;
+
+    if (gettimeofday(&time, NULL))
+    {
+        throw std::runtime_error("gettimeofday failed");
+        return 0;
+    }
+
+    return static_cast<unsigned long>(time.tv_sec) * 1000000 +
+           static_cast<unsigned long>(time.tv_usec);
 }
 
 struct image
@@ -85,74 +101,61 @@ __global__
 void
 invert_pixel(void* image, int width, int height)
 {
-    unsigned char* data = static_cast<unsigned char*>(image);
-    int index = 3 * (blockIdx.y * width + blockIdx.x) + blockIdx.z;
-    data[index] = ~data[index];
-}
+    unsigned long* data = static_cast<unsigned long*>(image) + blockIdx.x * 32 + threadIdx.x;
 
-void DisplayHeader()
-{
-    const int kb = 1024;
-    const int mb = kb * kb;
-    std::cout << "NBody.GPU" << std::endl << "=========" << std::endl << std::endl;
-    
-    std::cout << "CUDA version:   v" << CUDART_VERSION << std::endl;    
-    
-    int devCount;
-    cudaGetDeviceCount(&devCount);
-    std::cout << "CUDA Devices: " << std::endl << std::endl;
-    
-    for (int i = 0; i < devCount; ++i)
+    for (int i = 153; i != 0; --i, data += 640)
     {
-        cudaDeviceProp props;
-        cudaGetDeviceProperties(&props, i);
-        std::cout << i << ": " << props.name << ": " << props.major << "." << props.minor << std::endl;
-        std::cout << "  Global memory:   " << props.totalGlobalMem / mb << "mb" << std::endl;
-        std::cout << "  Shared memory:   " << props.sharedMemPerBlock / kb << "kb" << std::endl;
-        std::cout << "  Constant memory: " << props.totalConstMem / kb << "kb" << std::endl;
-        std::cout << "  Block registers: " << props.regsPerBlock << std::endl << std::endl;
-        
-        std::cout << "  Warp size:         " << props.warpSize << std::endl;
-        std::cout << "  Threads per block: " << props.maxThreadsPerBlock << std::endl;
-        std::cout << "  Max block dimensions: [ " << props.maxThreadsDim[0] << ", " << props.maxThreadsDim[1]  << ", " << props.maxThreadsDim[2] << " ]" << std::endl;
-        std::cout << "  Max grid dimensions:  [ " << props.maxGridSize[0] << ", " << props.maxGridSize[1]  << ", " << props.maxGridSize[2] << " ]" << std::endl;
-        std::cout << "  Number of multiprocessors: " << props.multiProcessorCount << std::endl;
-        std::cout << "  Number of concurrent kernels: " << props.concurrentKernels << std::endl;
-        std::cout << "  Maximum number of resident threads per multiprocessor: " << props.maxThreadsPerMultiProcessor << std::endl;
-        std::cout << "  Memory bus width: " << props.memoryBusWidth << std::endl;
-        std::cout << std::endl;
+        *data = ~*data;
+    }
+
+    if (blockIdx.x < 12)
+    {
+        *data = ~*data;
     }
 }
 
 int
 main(const int argc, const char* argv[])
 {
-    cuda_print_function_attributes_(invert_pixel);
-    return 0;
-    DisplayHeader();
-    return 0;
+    unsigned long t1, t2, t3, t4, t5, t6;
+
     try
     {
         image lenna("lenna512x512_inv.png");
 
-        void* device_input;
-        cuda_call(cudaMalloc, &device_input, lenna.data.size());
+        cuda_call(cudaFree, 0);
+
+        t1 = get_wall_time();
+
+        void* device_image_area;
+        cuda_call(cudaMalloc, &device_image_area, lenna.data.size());
+        
+        t2 = get_wall_time();
 
         cuda_call(cudaMemcpy,
-                  device_input, &lenna.data.front(),
+                  device_image_area, &lenna.data.front(),
                   lenna.data.size(), cudaMemcpyHostToDevice);
 
-        dim3 grid_dim(512, 512, 3);
+        t3 = get_wall_time();
 
-        cuda_launch(invert_pixel, grid_dim, 1, device_input, lenna.width, lenna.height); 
+        cuda_launch(invert_pixel, 20, 32, device_image_area, lenna.width, lenna.height); 
+
+        t4 = get_wall_time();
 
         cuda_call(cudaMemcpy,
-                  &lenna.data.front(), device_input,
+                  &lenna.data.front(), device_image_area,
                   lenna.data.size(), cudaMemcpyDeviceToHost);
+
+        t5 = get_wall_time();
         
-        cuda_call(cudaFree, device_input);
+        cuda_call(cudaFree, device_image_area);
+
+        t6 = get_wall_time();
         
         lenna.save("lenna512x512_orig.png");
+        
+        std::printf("%lu\t%lu\t%lu\t%lu\t%lu\n",
+                    (t2 - t1), (t3 - t2), (t4 - t3), (t5 - t4), (t6 - t5));
     }
     catch (std::runtime_error& error)
     {
