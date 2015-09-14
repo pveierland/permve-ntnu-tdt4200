@@ -1,29 +1,78 @@
+#include <cstddef>
 #include <iostream>
+#include <stdexcept>
+#include <string>
+
 #include "lodepng.h"
 
-int main( int argc, char ** argv){
+struct image
+{
+    image(const std::string& filename)
+    {
+        const unsigned int status = lodepng::decode(
+            data, width, height, filename, LCT_RGB);
 
-  size_t pngsize;
-  unsigned char *png;
-  const char * filename = "lenna512x512_inv.png";
-  /* Read in the image */
-  lodepng_load_file(&png, &pngsize, filename);
- 
-  unsigned char *image;
-  unsigned int width, height;
-  /* Decode it into a RGB 8-bit per channel vector */
-  unsigned int error = lodepng_decode24(&image, &width, &height, png, pngsize);
+        if (status)
+        {
+            throw std::runtime_error(
+                "failed to load image " + filename + ": " +
+                lodepng_error_text(status));
+        }
+    }
 
-  /* Check if read and decode of .png went well */
-  if(error != 0){
-      std::cout << "error " << error << ": " << lodepng_error_text(error) << std::endl;
-  }
+    void
+    save(const std::string filename)
+    {
+        const unsigned int status = lodepng::encode(
+            filename, data, width, height, LCT_RGB);
 
-  // Do work
+        if (status)
+        {
+            throw std::runtime_error(
+                "failed to save image " + filename + ": " +
+                lodepng_error_text(status));
+        }
+    }
 
-  /* Save the result to a new .png file */
-  lodepng_encode24_file("lenna512x512_orig.png", image , width,height);
+    unsigned int width, height;
+    std::vector<unsigned char> data;
+};
 
-  return 0;
+//__global__
+//void
+//invert_pixel()
+//{
+//
+//}
+
+#define CUDA_CALL(f, ...) { const cudaError_t status = f(__VA_ARGS__); if (status) { throw std::runtime_error(cudaGetErrorString(status)); } }
+
+int
+main(const int argc, const char* argv[])
+{
+    try
+    {
+        image image("lenna512x512_inv.png");
+
+        std::cout << "width = " << image.width << " height = " << image.height << " size = " << image.data.size() << std::endl;
+
+  //for ( int i = 0 ; i < image.width*image.height*3 ; i++ ) {
+  //  image.data[i] = ~image.data[i];
+  //}
+        void* device_image;
+
+        CUDA_CALL(cudaMalloc, &device_image, image.data.size());
+
+        CUDA_CALL(cudaFree, device_image);
+
+        //invert_pixel<<<1, 1>>>();
+        
+        //image.save("lenna512x512_orig.png");
+    }
+    catch (std::runtime_error& error)
+    {
+        std::cerr << error.what() << std::endl;
+        return 1;
+    }
 }
 
