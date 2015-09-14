@@ -45,7 +45,9 @@ struct image
 //
 //}
 
-#define CUDA_CALL(f, ...) { const cudaError_t status = f(__VA_ARGS__); if (status) { throw std::runtime_error(cudaGetErrorString(status)); } }
+#define CUDA_CALL(f, ...) { \
+    const cudaError_t status = f(__VA_ARGS__); \
+    if (status) { throw std::runtime_error(std::string(#f " failed: ") + cudaGetErrorString(status)); } }
 
 int
 main(const int argc, const char* argv[])
