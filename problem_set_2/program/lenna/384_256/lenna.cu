@@ -15,7 +15,6 @@
 { \
     kernel<<<grid_dim, block_dim>>>(__VA_ARGS__); \
     cuda_assert(cudaPeekAtLastError(), __FILE__, __LINE__, "kernel " #kernel " launch"); \
-    cuda_assert(cudaDeviceSynchronize(), __FILE__, __LINE__, "kernel " #kernel " synchronize"); \
 }
 
 inline

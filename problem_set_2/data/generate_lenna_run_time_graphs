@@ -4,6 +4,9 @@ function benchmark {
     rm -f ${BASEDIR}/lenna_${1}.txt
     printf "#iteration,total [us],lodepng::decode [us],Create CUDA context [us],lodepng::encode [us],cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
 
+    # Run program once to warm caches
+    cd ${BASEDIR}/../program/lenna/${1}/ && ./gpu_version > /dev/null
+
     for (( c=1; c<=$2; c++ ))
     do
         cd ${BASEDIR}/../program/lenna/${1}/ && ./gpu_version | awk -v count="$c" '{ printf("%d,%s\n", count, $0); }' >> ${BASEDIR}/lenna_${1}.txt
