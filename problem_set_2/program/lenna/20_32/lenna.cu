@@ -101,7 +101,8 @@ __global__
 void
 invert_pixels(void* image, int width, int height)
 {
-    unsigned long* data = static_cast<unsigned long*>(image) + blockIdx.x * 32 + threadIdx.x;
+    unsigned long* data = static_cast<unsigned long*>(image) +
+        blockIdx.x * 32 + threadIdx.x;
 
     for (int i = 153; i != 0; --i, data += 640)
     {
@@ -117,45 +118,55 @@ invert_pixels(void* image, int width, int height)
 int
 main(const int argc, const char* argv[])
 {
-    unsigned long t1, t2, t3, t4, t5, t6;
-
     try
     {
         image lenna("lenna512x512_inv.png");
+        
+        cudaEvent_t e1, e2, e3, e4, e5, e6;
+        
+        cuda_call(cudaEventCreate, &e1);
+        cuda_call(cudaEventCreate, &e2);
+        cuda_call(cudaEventCreate, &e3);
+        cuda_call(cudaEventCreate, &e4);
+        cuda_call(cudaEventCreate, &e5);
+        cuda_call(cudaEventCreate, &e6);
 
         cuda_call(cudaFree, 0);
 
-        t1 = get_wall_time();
+        cuda_call(cudaEventRecord, e1);
 
         void* device_image_area;
         cuda_call(cudaMalloc, &device_image_area, lenna.data.size());
         
-        t2 = get_wall_time();
+        cuda_call(cudaEventRecord, e2);
 
         cuda_call(cudaMemcpy,
                   device_image_area, &lenna.data.front(),
                   lenna.data.size(), cudaMemcpyHostToDevice);
 
-        t3 = get_wall_time();
+        cuda_call(cudaEventRecord, e3);
 
         cuda_launch(invert_pixels, 20, 32, device_image_area, lenna.width, lenna.height); 
 
-        t4 = get_wall_time();
+        cuda_call(cudaEventRecord, e4);
 
         cuda_call(cudaMemcpy,
                   &lenna.data.front(), device_image_area,
                   lenna.data.size(), cudaMemcpyDeviceToHost);
 
-        t5 = get_wall_time();
+        cuda_call(cudaEventRecord, e5);
         
         cuda_call(cudaFree, device_image_area);
 
-        t6 = get_wall_time();
+        cuda_call(cudaEventRecord, e6);
+
+        cuda_call(cudaEventSynchronize, e6);
         
         lenna.save("lenna512x512_orig.png");
         
-        std::printf("%lu,%lu,%lu,%lu,%lu\n",
-                    (t2 - t1), (t3 - t2), (t4 - t3), (t5 - t4), (t6 - t5));
+        // Convert output to microseconds:
+        std::printf("%f,%f,%f,%f,%f\n",
+                    p1 * 1000, p2 * 1000, p3 * 1000, p4 * 1000, p5 * 1000);
     }
     catch (std::runtime_error& error)
     {

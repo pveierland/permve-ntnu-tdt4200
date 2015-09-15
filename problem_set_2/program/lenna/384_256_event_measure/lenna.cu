@@ -163,7 +163,7 @@ main(const int argc, const char* argv[])
         cuda_call(cudaEventElapsedTime, &p4, e4, e5);
         cuda_call(cudaEventElapsedTime, &p5, e5, e6);
 
-        // Convert output to microseconds to match earlier Lenna program versions:
+        // Convert output to microseconds:
         std::printf("%f,%f,%f,%f,%f\n",
                     p1 * 1000, p2 * 1000, p3 * 1000, p4 * 1000, p5 * 1000);
     }
