@@ -154,7 +154,7 @@ main(const int argc, const char* argv[])
         
         lenna.save("lenna512x512_orig.png");
         
-        std::printf("%lu\t%lu\t%lu\t%lu\t%lu\n",
+        std::printf("%lu,%lu,%lu,%lu,%lu\n",
                     (t2 - t1), (t3 - t2), (t4 - t3), (t5 - t4), (t6 - t5));
     }
     catch (std::runtime_error& error)

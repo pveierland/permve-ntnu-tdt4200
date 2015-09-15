@@ -1,0 +1,17 @@
+#!/bin/bash -e
+
+function benchmark {
+    rm -f ${BASEDIR}/lenna_${1}.txt
+    printf "#cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
+
+    for (( c=1; c<=$2; c++ ))
+    do
+        cd ${BASEDIR}/../program/lenna/${1}/ && ./gpu_version | awk -v count="$c" '{ printf("%d,%s\n", count, $0); }' >> ${BASEDIR}/lenna_${1}.txt
+    done
+}
+
+BASEDIR=$(readlink -f $(dirname $0))
+
+benchmark 20_32 50
+benchmark 384_256 50
+
