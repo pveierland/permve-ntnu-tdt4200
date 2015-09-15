@@ -163,6 +163,14 @@ main(const int argc, const char* argv[])
         cuda_call(cudaEventSynchronize, e6);
         
         lenna.save("lenna512x512_orig.png");
+
+        float p1, p2, p3, p4, p5;
+
+        cuda_call(cudaEventElapsedTime, &p1, e1, e2);
+        cuda_call(cudaEventElapsedTime, &p2, e2, e3);
+        cuda_call(cudaEventElapsedTime, &p3, e3, e4);
+        cuda_call(cudaEventElapsedTime, &p4, e4, e5);
+        cuda_call(cudaEventElapsedTime, &p5, e5, e6);
         
         // Convert output to microseconds:
         std::printf("%f,%f,%f,%f,%f\n",
