@@ -2,7 +2,7 @@
 
 function benchmark {
     rm -f ${BASEDIR}/lenna_${1}.txt
-    printf "#cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
+    printf "#iteration,cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
 
     for (( c=1; c<=$2; c++ ))
     do
@@ -14,5 +14,4 @@ BASEDIR=$(readlink -f $(dirname $0))
 
 benchmark 20_32 50
 benchmark 384_256 50
-benchmark 384_256_event_measure 50
 
