@@ -99,7 +99,7 @@ struct image
 
 __global__
 void
-invert_pixel(void* image, int width, int height)
+invert_pixels(void* image, int width, int height)
 {
     unsigned long* data = static_cast<unsigned long*>(image) + blockIdx.x * 32 + threadIdx.x;
 
@@ -138,7 +138,7 @@ main(const int argc, const char* argv[])
 
         t3 = get_wall_time();
 
-        cuda_launch(invert_pixel, 20, 32, device_image_area, lenna.width, lenna.height); 
+        cuda_launch(invert_pixels, 20, 32, device_image_area, lenna.width, lenna.height); 
 
         t4 = get_wall_time();
 
