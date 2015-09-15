@@ -14,4 +14,5 @@ BASEDIR=$(readlink -f $(dirname $0))
 
 benchmark 20_32 50
 benchmark 384_256 50
+benchmark 384_256_event_measure 50
 
