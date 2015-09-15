@@ -112,8 +112,12 @@ main(const int argc, const char* argv[])
 {
     try
     {
+        const unsigned long t1 = get_wall_time();
+
         image lenna("lenna512x512_inv.png");
 
+        const unsigned long t2 = get_wall_time();
+        
         cudaEvent_t e1, e2, e3, e4, e5, e6;
         
         cuda_call(cudaEventCreate, &e1);
@@ -124,6 +128,8 @@ main(const int argc, const char* argv[])
         cuda_call(cudaEventCreate, &e6);
 
         cuda_call(cudaFree, 0);
+
+        const unsigned long t3 = get_wall_time();
 
         cuda_call(cudaEventRecord, e1);
 
@@ -153,8 +159,12 @@ main(const int argc, const char* argv[])
         cuda_call(cudaEventRecord, e6);
 
         cuda_call(cudaEventSynchronize, e6);
-       
+
+        const unsigned long t4 = get_wall_time();
+        
         lenna.save("lenna512x512_orig.png");
+
+        const unsigned long t5 = get_wall_time();
 
         float p1, p2, p3, p4, p5;
 
@@ -165,7 +175,8 @@ main(const int argc, const char* argv[])
         cuda_call(cudaEventElapsedTime, &p5, e5, e6);
 
         // Convert output to microseconds:
-        std::printf("%f,%f,%f,%f,%f\n",
+        std::printf("%lu,%lu,%lu,%lu,%f,%f,%f,%f,%f\n",
+                    t5 - t1, t2 - t1, t3 - t2, t5 - t4,
                     p1 * 1000, p2 * 1000, p3 * 1000, p4 * 1000, p5 * 1000);
     }
     catch (std::runtime_error& error)

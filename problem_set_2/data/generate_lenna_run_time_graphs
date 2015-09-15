@@ -2,7 +2,7 @@
 
 function benchmark {
     rm -f ${BASEDIR}/lenna_${1}.txt
-    printf "#iteration,cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
+    printf "#iteration,total [us],lodepng::decode [us],Create CUDA context [us],lodepng::encode [us],cudaMalloc [us],cudaMemcpyHostToDevice [us],invert_pixels [us],cudaMemcpyDeviceToHost [us],cudaFree [us]\n" >> ${BASEDIR}/lenna_${1}.txt
 
     for (( c=1; c<=$2; c++ ))
     do
