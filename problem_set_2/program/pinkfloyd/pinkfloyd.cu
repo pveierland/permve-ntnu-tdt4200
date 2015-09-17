@@ -282,24 +282,24 @@ woot(unsigned char* image,
     const float d2 = sx * info->e2.x + sy * info->e2.y + info->e2.z;
     const float d3 = sx * info->e3.x + sy * info->e3.y + info->e3.z;
 
-    //printf("%d %d %d\n", info->e0.x, info->e0.y, info->e0.z);
-
     if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
     {
         unsigned char* pixel = image + 4 * (y * width + x);
-        
+
         const float alpha = tex1D(gaussian_lut, d0 < d2 ? d0 : d2) *
                             tex1D(gaussian_lut, d1 < d3 ? d1 : d3);
 
-        float b_r = pixel[0] / 255.0f;
-        float b_g = pixel[1] / 255.0f;
-        float b_b = pixel[2] / 255.0f;
-        float b_a = pixel[3] / 255.0f;
+        const float b_r = pixel[0] / 255.0f;
+        const float b_g = pixel[1] / 255.0f;
+        const float b_b = pixel[2] / 255.0f;
+        const float b_a = pixel[3] / 255.0f;
 
-        float r = info->color.r * alpha + b_r * (1.0 - alpha);
-        float g = info->color.g * alpha + b_g * (1.0 - alpha);
-        float b = info->color.b * alpha + b_b * (1.0 - alpha);
-        float a = alpha + b_a * (1.0 - alpha);
+        const float inverse_alpha = 1.0f - alpha;
+
+        const float r = info->color.r * alpha + b_r * inverse_alpha;
+        const float g = info->color.g * alpha + b_g * inverse_alpha;
+        const float b = info->color.b * alpha + b_b * inverse_alpha;
+        const float a = alpha + b_a * inverse_alpha;
 
         pixel[0] = static_cast<unsigned char>(255.0f * r);
         pixel[1] = static_cast<unsigned char>(255.0f * g),
@@ -412,38 +412,6 @@ main(const int argc, const char* argv[])
                                 line->y1 * line->y1 -
                                 line->x0 * line->x1 -
                                 line->y0 * line->y1));
-
-//        for (int x = 0; x != width; ++x)
-//        {
-//            for (int y = 0; y != height; ++y)
-//            {
-//                const float sx = (float)x / width;
-//                const float sy = (float)y / height;
-//
-//                const vec3 v(sx, sy, 1);
-//
-//                const float d0 = v.dot(e0);
-//                const float d1 = v.dot(e1);
-//                const float d2 = v.dot(e2);
-//                const float d3 = v.dot(e3);
-//
-//                if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
-//                {
-//                    unsigned char* pixel = &image.front() + 4 * (y * width + x);
-//                   /*jj 
-//                    const float alpha = lookup[static_cast<int>(std::floor(std::min(d0, d2) * 32.0f))] *
-//                                        lookup[static_cast<int>(std::floor(std::min(d1, d3) * 32.0f))];
-//*/
-//                    const float alpha = 1.0;
-//
-//                    combine(pixel,
-//                            alpha * line->color.r, 
-//                            alpha * line->color.g,
-//                            alpha * line->color.b,
-//                            alpha);
-//                }
-//            }
-//        }
     }
 
     //for (int x = 0; x != width; ++x)
