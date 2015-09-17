@@ -16,8 +16,10 @@
 
 \date{\normalsize\today}
 
+\newacro{CPU}{Central Processing Unit}
 \newacro{CUDA}{Compute Unified Device Architecture}
 \newacro{GPU}{Graphics Processor Unit}
+\newacro{MIMD}{Multiple Instruction Multiple Data}
 \newacro{NUMA}{Nonuniform memory access}
 \newacro{SGI}{Silicon Graphics International}
 \newacro{SIMT}{Single Instruction Multiple Thread}
@@ -43,7 +45,10 @@ Keywords being: Homogeneous cores, heterogeneous cores, clusters, NUMA, threads.
 Within each \textit{processing block} (not to be mixed with \textit{thread block}) there is a register file which is shared by the processing cores and is used for thread register storage and thread local storage. All processing blocks within an \ac{SM} has one L1/texture cache as well as a shared memory. All \acp{SM} share a common L2 cache. There is no L3 cache. For each memory; the thread private memory, the \ac{SM} shared memory, and the external global memory; there is equal access time for all users, so the architecture has uniform memory access.
 
 Threads in a \ac{CUDA} system are used to execute kernel programs. Each thread has its own program counter, registers and thread local storage. This data is stored in the processing block's register file. Threads are organized into \textit{thread blocks} by the application. The \ac{GPU} global \textit{GigaThread Engine} schedules thread blocks onto \acp{SM}. Within an \ac{SM} threads are executed as part of warps. A \textit{warp} is a collection of 32 threads which is executed simultaneously. The GM204 chip has 4 \textit{warp schedulers} per \ac{SM} which each can dispatch two instructions per warp per clock cycle. Since there is no register state within the processing cores, only in the register file, the \ac{SM} can immediately switch between executing different warps without any context switch cost. When executing a warp every processing core must execute the same instruction. This is what makes the architecture \ac{SIMT}; there is a single instruction being executed by multiple threads simultaneously. 
-\item ARM big.LITTLE
+
+\item \textit{ARM big.LITTLE} is a heterogeneous computer architecture consisting of a set of smaller (``little'') processing cores combined with a set of larger (``big'') processing cores. The architecture is primarily intended for embedded applications, especially smartphones, where power consumption is of great concern. Having smaller cores with less functionality which can used to handle lighter tasks saves the system from spending more power to achieve the same task with a bigger, more power demanding processing core. The memory access is uniform. 
+
+The \textit{ARM big.LITTLE} can be viewed and used as being composed of two clusters, the ``high'' cluster consisting of the ``big'' cores, and the ``low cluster'' consisting of the ``little'' cores. With clustered switching, only one of the clusters is used a time and the operating system can only view and use one cluster at a time. The processor cores share access to the L2 cache which is used to transfer state when switching execution between the two clusters.
 
 \item \textit{Vilje @ NTNU} is a \ac{SGI} Altix ICE X system composed of a cluster of 1404 nodes connected by an Infiniband interconnect which is used for communication between nodes.
 
@@ -53,13 +58,35 @@ The Intel Xeon E5-2670 processors used for each node has eight homogeneous cores
 
 The processor cores supports \ac{SMT}, also known by the term \textit{Hyper-threading} used by Intel, which allows a single physical processor core to simultaneously execute two logical threads. This is possible because each processor core is able to hold the state for two threads simultaneously and weaves their execution through a shared instruction pipeline. This technique helps the processor core better utilize all of its functional units, leading to more efficient execution.
 
-\item Typical modern-day CPU
+\item \textit{A Typical modern-day \ac{CPU}} consists of one physical processor with 2-8 homogeneous cores and uniform memory access. Most often each core will support \ac{SMT} also known as \textit{Hyperthreading} for Intel processors which allows each core to execute two threads in one instruction pipeline. A modern \ac{CPU} typically has 3 on-chip caches known as the L1, L2, and L3 cache. The processor cores are usually quite sophisticated and contains functionality for pipelining with branch prediction, speculative execution as well as predicting memory access and pre-fetching data from memory. A single \ac{CPU} system, although it has multiple cores, is not usually viewed as a cluster.
 
 \end{enumerate}
 
 \item \textbf{Explain Nvidia's SIMT addition to Flynn's Taxonomy, and how it is realized, if at all, in each of the architectures from a).}
 
+\acf{SIMT} is used by Nvidia to describe an architecture where a single instruction stream is executed in parallel for a set of threads. This is realized by having ``warps'' of threads execute on a \acf{SM} which has one instruction decoder for a large set of functional cores. This allows a single instruction to be executed in exact parallel for a set of threads.
+
+The \textit{Nvidia Maxwell} architecture implements \ac{SIMT} through having a set of \acp{SM}, each with four warp schedulers. Each \ac{SM} has a large number of cores which each warp scheduler uses to execute sets of threads.
+
+None of the other architectures mentioned in a) implements \ac{SIMT}. \ac{SMT} / \textit{Hyperthreading} is different as it involves multiple instruction streams and does not perform simultaneous computation.
+
 \item \textbf{For each architecture from a), report which classification from Flynn's Taxonomy is best suited. If applicable, also state if the architecture fits Nvidia's SIMT-classification. Give the reasoning(s) behind your answers.}
+
+\begin{itemize}
+
+\item
+\textit{Nvidia Maxwell} can be described as both \ac{SIMT} and \ac{MIMD}. The \ac{SIMT} description is used to describe how warps are executed on the \ac{GPU} architecture, where a single instruction stream is shared by many threads with different data. A \ac{SIMT} architecture by definition operates on multiple data streams. However since Maxwell systems has several \acp{SM}, each capable of executing multiple kernels in parallel with different instruction streams, the system as a whole can also be described as having multiple instruction streams, thus being a \ac{MIMD} system as well.
+
+\item
+\textit{ARM big.LITTLE} can be described as a \ac{MIMD} system as it has multiple processing cores executing multiple instruction streams, and since it supports vector instructions allowing it to work on multiple data streams. It can not be described as a \ac{SIMT} architecture.
+
+\item
+\textit{Vilje @ NTNU} can be described as being a \ac{MIMD} systems, both on a ``low level'' since it runs on processors with multiple cores supporting vector instructions -- and on a ``higher level'' since it is a clustered system where different instruction streams are run on different processors with different data. It can not be described as a \ac{SIMT} system.
+
+\item
+\textit{A typical modern-day \ac{CPU}} can be described as a \ac{MIMD} system since it consists of multiple processing cores capable of executing multiple instruction streams in parallel on separate sets of data. It also supports vector instructions which would make each processor core capable of multiple data stream usage. It can not be described as a \ac{SIMT} system.
+
+\end{itemize}
 
 \end{enumerate}
 
@@ -95,87 +122,70 @@ Figure \ref{figure:gridblock} shows that a \textit{block} is composed of a set o
 \label{figure:gridblock}
 \end{figure}
 
-%SIMT = Multiple threads execute concurrently using single instruction.
-%Each thread has per-thread private local memory.
-%Each thread block has per-block shared memory.
-%Each grid has per-application global memory.
-%
-%Each thread within a thread block executes an instance of the kernel, and has a thread ID within its thread block, program counter, registers, per-thread private memory, inputs and output results.
-%
-%A thread block is a set of concurrently executing threads that can cooperate among themselves through barrier synchronization and shared memory. A thread block has a block ID within its grid.
-%
-%A grid is an array of thread blocks that execute the same kernel, read inputs from global memory, write results to global memory, and synchronize between dependent kernel calls.  
-%A GPU executes one or more kernel grids; a streaming multiprocessor executes one or more thread blocks; and CUDA cores and other execution units in the SM executes threads. The SM executes threads in groups of 32 threads called a warp. Can greatly improve performance by having all threads in a warp execute same code path and access memory in nearby addresses.
-%
-%A CUDA core executes a floating point or integer instruction per clock for a thread. 
-%
-%All threads in a grid execute the same kernel function.
-%
-%Each thread has registers and local memory.
-%
-%The GigaThread global scheduler distributes thread blocks to SM thread schedulers.
-%
-%The SM schedules threads in groups of 32 parallel threads called warps. Each SM features two warp schedulers and two instruction dispatch units, allowing two warps to be issued and executed concurrently. 
-%
-%Each Streaming Multiprocessor has multiple processing cores.
-%For Fermi each SM contains 32 processing cores.
-%AKA ``CUDA cores''.
-%These cores execute in a Single Instruction Multiple Thread fashion.
-%Up to 16 SMs on a card for a maximum of 512 compute cores.
-%A grid is composed of blocks which are completely independent.
-%A block is composed of threads which can communicate within their own block.
-%32 threads for a warp. Instructions are issued per warp. If an operand is not ready, the warp will stall. Context switching occurs between warps when stalled.
-%
-%Registers and shared memory are allocated for a block as long as that block is alive. Once a block is active it will stay active until all threads in that block have completed. Context switching is very fast because registers and shared memory do not need to be saved and restored.
-%
-%Fermi can have up to 48 active warps per SM (1536 threads).
-%
-%Occupancy = Active warps / Maximum active warps
-%
-%Occupancy can be limited by register usage. Active threads = Register memory per SM / (Registers per thread) = X threads. X threads / 1536 = occupancy
-%
-%Occupancy can be limited by shared memory usage: Given 48K shared memory and each kernel uses 32 bytes of shared memory per thread. 48K/32=1536 threads. Occupancy = 1
-%
-%Occupancy limiter: Each SM can have up to 8 active blocks. A small block size will limit the number of threads. Active threads = blockSize * maxblocks
-%
-%If the kernel is bandwidth bound: Attempt to increase occupancy. Use occupancy calculator.
-%
-%Threads can efficiently communicate and synchronize between each other; blocks cannot. Within a block, threads share data via local shared memory by using the declaration \texttt{\_\_shared\_\_} which is allocated per block. This data is not visible to threads in other blocks. Device memory is global memory. \textit{\_\_syncthreads()} can be used as a barrier to synchronize threads within a block. All threads must reach the barrier.
+\item \textbf{Consider an algorithm whose input has size $2n$, output has size $5n$, and execution time is $5hn \cdot 7h \cdot \log_2(n)$ where $h = 1$ on the GPU and $h = 10$ on the \ac{CPU}. The ac{CPU}-GPU bus has a bandwidth of $r$. How big must $n$ be before it is faster to run the dataset with the algorithm detailed on the GPU instead of the ac{CPU}?}
 
-%__global__ is a CUDA kernel which can be called from host and from device
-%__device__ is a CUDA kernel which can only be called from the device
+When comparing the total cost of running the two algorithms it is assumed that the input comes from the host memory and the output is to be stored in the host memory.
 
-%compute capability describes feature set of CUDA device. Number of registers, sizes of memories, features and capabilities.
+For the ac{CPU} the total runtime will simply be the execution time. However for the \ac{GPU} the total runtime will be the \ac{GPU} execution time plus the time it takes to transfer the input data from the host memory to the \ac{GPU} and the output data from the \ac{GPU} back to the host memory.
 
-%N blocks with M threads per block is launched with \texttt{kernel\textless \textlessi \textless{}N,M\textgreater \textgreater \textgreater ($\ldots$)}. Kernel launches are asynchronous.
+The following inequality shows for which values of $n$ for which it will be faster to run the dataset with the \ac{GPU} algorithm instead of the ac{CPU} algorithm.
 
-% cudaMemcpy blocks CPU until copy is complete.
-% cudaMemcpyAsync does not block CPU
-% cudaDeviceSynchronize blocks CPU until all CUDA calls have completed
-
-% blockIdx gives the block index within the grid
-% threadIdx gives the grid index within the block
-% blockDim gives the dimensions within each box
-% gridDim gives the dimensions within the grid
-% both blockIdx and threadIdx are 3-D
-\item \textbf{Consider an algorithm whose input has size $2n$, output has size $5n$, and execution time is $5hn \cdot 7h \cdot \log_2(n)$ where $h = 1$ on the GPU and $h = 10$ on the CPU. The CPU-GPU bus has a bandwidth of $r$. How big must $n$ be before it is faster to run the dataset with the algorithm detailed on the GPU instead of the CPU?}
-
-%\begin{tikzpicture}
-%\draw[->] (0,0) -- (4.2,0) node[right] {$n$};
-%\draw[->] (0,0) -- (0,4.2) node[above] {$T$};
-%\draw[scale=0.1,domain=0:3,smooth,variable=\n,blue] plot ({\n},{5*\n*7}); % GPU
-%\end{tikzpicture}
+\begin{align*}
+5 \cdot 10 \cdot n \cdot 7 \cdot 10 \cdot \log_2(n) &> 5 \cdot 1 \cdot n \cdot 7 \cdot 1 \cdot \log_2(n) + \frac{2n}{r} + \frac{5n}{r}\\
+3500 \cdot n \cdot \log_2(n) &> 35 \cdot n \cdot \log_2(n) + \frac{2n}{r} + \frac{5n}{r}\\
+3500 \cdot \log_2(n) &> 35 \cdot \log_2(n) + \frac{2}{r} + \frac{5}{r}\\
+3500 \cdot \log_2(n) &> 35 \cdot \log_2(n) + \frac{2 + 5}{r}\\
+3500 \cdot \log_2(n) \cdot r &> 35 \cdot \log_2(n) \cdot r + 2 + 5\\
+3500 \cdot \log_2(n) \cdot r - 35 \cdot \log_2(n) \cdot r &> 7\\
+\log_2(n) \cdot (3500r - 35r) &> 7\\
+\log_2(n) &> \frac{7}{3500r - 35r}\\
+\log_2(n) &> \frac{1}{500r - 5r}\\
+\log_2(n) &> \frac{1}{495r}\\
+n &> 2^{\frac{1}{495r}}
+\end{align*}
 
 \item \textbf{Which of \texttt{kernel1()} and \texttt{kernel2()} will execute fastest, given that $X$ and $Y$ are \textit{gridDim} and \textit{blockDim} respectively, containing $3$ integers with positive powers of $2$ higher than $2^4$?}
+
+Of the two kernels, \texttt{kernel2()} should execute the fastest. The reason is that the first kernel uses a branch which depends on the thread index which means that threads within a single warp will diverge, something is much more costly than the second kernel's case -- where each warp within a block will follow the same code path.
 
 \item \textbf{Explain each of the following terms, and how each should be utilized for maximum effect in a CUDA program:}
 
 \begin{enumerate}
-\item Warps
-\item Occupancy
-\item Memory Coalescing
-\item Local Memory
-\item Shared Memory
+
+\item \textbf{Warps}
+
+In a \ac{CUDA} architecture the term \textit{warp} is used to refer to a group of threads being executed simultaneously by an \ac{SM}. Currently a warp consists of a up to 32 threads. All threads in a warp always executes the same instruction on different \ac{CUDA} cores. When waiting for memory operations, barrier synchronizations or other dependencies a warp will not be eligible for dispatch and will only be dispatched once the awaited resource is available. 
+
+Because of their simultaneous execution it is very important to be aware of the effect of performing computation in warps. Warp divergence occurs when different threads execute different code paths. When this occurs within a warp it can severely reduce performance since only the threads on the relevant code path is performing productive computations while the others are wasted. For this reason it is highly desirable to get rid of branches where possible, or to ensure that different code paths are only taken on warp boundaries.
+
+For maximum effect in a \ac{CUDA} program, warps must be utilized, and it is desirably that the number of threads per block is always a multiple of 32 such that full warps can be run. It is also important to ensure that there will always be several warps eligible for execution for each \ac{SM}. Whenever one warp becomes ineligible for dispatch other warps must be available to keep the processors busy. This continued execution of different warps is necessary to mask resource access delays. It is also important to note that the processor switching between different warps carries no extra cost such as is the case with a traditional \ac{CPU}. In a traditional \ac{CPU} system time is required to store and retrieve state information to perform context switching between threads. This cost does not exist when switching between warps.
+
+\item \textbf{Occupancy}
+
+Occupancy is a technical term used with \ac{CUDA} which refers to the ratio of active warps divided by the number of maximum active warps. The occupancy ratio is an important heuristic to achieve the best performance in a \ac{CUDA} system. One of the main objectives to achieve maximum performance is to keep the memory interface saturated with transfers. Achieving this requires that there is always enough transactions in flight. By weaving the execution of many warps such that there is always available warps which can work while other warps await memory transactions the system can be fully utilized. 
+
+The Maxwell architecture supports up to 64 active warps per \ac{SM}. This is more than the number of active thread blocks per \ac{SM}, which for Maxwell is 32.
+
+The occupancy ratio can be limited by factors such as register usage, shared memory usage and block size. Depending on the amount of registers used by each thread there may not be enough space to achieve the maximum number of active warps. Shared memory is also a limited resource and can limit the number of active warps in the same way. Block size can also be a limiting factor since there is a limited number of threads per block. If the number of blocks per \ac{SM} is too low the number of threads will also be too low to achieve the maximum number of active warps.
+
+Nvidia ships an occupancy calculator Excel spreadsheet as part of their SDK which can be used as a tool to estimate the occupancy ratio. \ac{CUDA} 6.5 also includes a new \textit{Occupancy API} which provides functions to estimate occupancy and other factors directly based on the actual program code.
+
+\item \textbf{Memory Coalescing}
+
+Memory coalescing allows global memory accesses made by a group of threads to be grouped into a single transaction. If four threads within a warp each attempts to read a 32-bit integer from adjacent areas of global memory, the memory transaction can be grouped such that a 128-bit access can be performed instead, thus utilizing the whole memory bus for a memory access. Being aware of memory access patterns is important to achieve maximum performance in a \ac{CUDA} system.
+
+\item \textbf{Local Memory}
+
+Local memory does not refer to a specific physical memory but is an abstraction representing storage which is private to a thread instance. When there is inadequate register space available or if there for other reasons is not possible to keep a automatic variable in a thread in registers the contents are stored in local memory. It is important to note that the contents of the local memory is actually stored in global memory with the much greater access cost which this entails.
+
+For performance reasons it is important to be aware that automatic thread variables such as large arrays or other structures which consume too much register space will spill to local memory. Since local memory is stored in global memory this will dramatically increase the time to access the data, even if it may appear to be local data. Restructuring variable usage may be necessary depending on the situation.
+
+\item \textbf{Shared Memory}
+
+Shared memory is a fast physical memory contained in each \ac{SM}. When executing \ac{CUDA} thread blocks it is guaranteed that all threads in a single thread block will be run on the same \ac{SM} with access to the same shared memory. This makes shared memory the fastest mechanism for sharing and cooperatively computing data between threads. For cases where a block of threads make some set of computations on one set of data retrieved from global memory it can be much faster to transfer the data to shared memory, perform all computations, and then transfer the data back to global memory -- compared to making the transfer from global memory to registers and back for every computation.
+
+\ac{CUDA} also offers special atomic operations which can be used both against global memory as well as shared memory which can be used for fast concurrency interactions between threads.
+
 \end{enumerate}
 
 \end{enumerate}
@@ -234,9 +244,13 @@ According to Nvidia the GM107 \ac{GPU} has a theoretical memory bandwidth of 86.
 \textit{BW}_\text{effective} = \frac{R_B + W_B}{t_K} = \frac{2 \cdot (512 * 512 * 3\text{~bytes})}{14.71~\text{us}} = 106.92~\text{GB/s}
 \end{displaymath}
 
-Where $R_B$ is the number of bytes read from memory, $W_B$ is the number of bytes written to memory, and $t_K$ is the kernel execution time. An exact reason for why this number exceeds the theoretical bandwidth is unknown. A hypothetical kernel achieving maximum bandwidth usage should have spent 18.20~us for the given amount of data.
+Where $R_B$ is the number of bytes read from memory, $W_B$ is the number of bytes written to memory, and $t_K$ is the kernel execution time. The reason that this calculation exceeds the theoretical maximum bandwidth is most likely that data waiting to be written to global memory is still in cache when the kernel's execution is complete. A hypothetical kernel achieving maximum bandwidth usage should spend 18.20~us for the given amount of data.
 
 \textit{Reference: http://devblogs.nvidia.com/parallelforall/how-implement-performance-metrics-cuda-cc/}
+
+In one additional experiment, using a dummy kernel to help warm the system helped reduce the \texttt{invert\_pixels} runtime from 14.71~us to 13.9~us.
+
+\textit{Reference: https://cudaspace.wordpress.com/2013/04/04/difference-on-creating-a-cuda-context-for-timing-a-kernel-warmups/}
 
 \item \textbf{Implement a \texttt{make cuda} makefile rule which compiles (but does not execute) the CUDA executable \texttt{gpu\_version}.}
 
@@ -246,9 +260,17 @@ A \texttt{cuda} rule has been added to the provided \texttt{Makefile}.
 
 After measuring the program running time it is evident that the majority of the program is spent on decoding the input image, creating the \ac{CUDA} context, and encoding the output image, see Table~\ref{table:lenna_runtime_distribution}. The measurements are a result of averaging 50 program runs. Compared to the entire program, only 0.12\% is spent on copying the input image to the device and 0.11\% is spent on copying the output image from the device.
 
-When discounting the input image decoding, the \ac{CUDA} context initialization and the output image encoding from the consideration, the copying of the input image to the device takes 29\% of the runtime, and copying the output image from the device takes 26\% of the runtime. Whether spending more or less time of the program runtime on copying data to and from the device is ideal would depend on the problem being solved. Spending much of the runtime on copying might mean that the problem is being solved very efficiently on the \ac{GPU}. However we shall assume that it would be considered more ideal if less of the relative runtime is spent on copying and more is spent on actual computation.
+When discounting the input image decoding, the \ac{CUDA} context initialization and the output image encoding from the consideration, the copying of the input image to the device takes 29\% of the runtime, and copying the output image from the device takes 26\% of the runtime.
 
-Achieving this can be done by increasing the amount of data transferred to the device, and by increasing the complexity of the computation performed on the \ac{GPU}. Increasing the amount of data transferred to the device above a certain threshold will help eliminate overhead associated with the copying operation and the cost will be a more direct function of the amount of data transferred. Increasing the complexity of the computation performed will help the most by directly increasing the time of the program spent performing actual computation. For the given scenario there is no current suggestion as to how this could be achieved since the specified computation involves very cheap operations.
+Reducing the impact of copying between the host and the device on the program's runtime can be accomplished in several ways:
+
+\begin{itemize}
+\item Through the use of page-locked (``pinned'') memory higher bandwidth can be achieved between the host and the target. By default, the memory allocated in host programs is pageable. The \ac{GPU} cannot access pageable host memory directly and must perform copies from the pageable host memory via a temporary non-pageable memory area on the host before copying it to the \ac{GPU}. By changing the host program to use page-locked memory via functions such as \texttt{cudaMallocHost}, the performance of copying can be improved by a factor of two.
+
+\item With larger amounts of data the program can utilize streaming to improve performance significantly. Using streaming, asynchronous copy operations and kernel execution is bound to a stream flow which can be used to segment the program execution. If performing computations on a large dataset, streams can be used to fluidly segment the data such that one segment can be computed on the \ac{GPU} while the data for the next segment is being copied.
+\end{itemize}
+
+In general, the portion of the program spent on copying data can be reduced directly by increasing the computation executed by the \ac{GPU}. If the \ac{GPU} executed more expensive operations on the same data a larger portion of the program time will be spent on computation.
 
 \begin{table}
 \begin{tabular}{rrll}
@@ -278,7 +300,7 @@ Percent of program & Total time (us) & Description            & Function \\
 11.32/lodepng::decode (17.4~ms),
 37.37/Initialize CUDA context (57.5~ms),
 50.89/lodepng::encode (78.2~ms),
-0.42/Device malloc + free + copy + kernel
+0.42/CUDA operations
 } {
 \ifx\percent\empty\else               % If \percent is empty, do nothing
 \global\advance\cyclecount by 1     % Advance cyclecount
@@ -346,6 +368,24 @@ at (\angle+0.5*\percent*3.6:\radius) {};
 \end{enumerate}
 
 \subsection*{Problem 2: Pinkfloyd Intro}
+
+A working first draft for a program capable of rendering a set of anti-aliased lines on a canvas is presented. Building a good renderer is a large task and there are many large and long avenues for improvement. The program built shows basic usage of the \ac{CUDA} texture and stream functionality.
+
+Before the lines can be rendered, the 4 equations describing each edge in the line is computed using the \texttt{calculate\_line\_equations} kernel. This kernel is ran with one instance per line and performs a fairly pure computation without branching. After this kernel has completed, a set of streams are created. Each stream is responsible for performing all computations necessary for one part of the image. The stream allows the \texttt{draw\_line} kernel to be executed for each line in order. Each kernel launch computes all pixels for an area of the final image for the given line.
+
+When rendering anti-aliased lines a function is used to perform the edge filtering. For every pixel which is part of a line, two calculations are needed to determine the resulting alpha value of the pixel. The edge filter is a Gaussian function which is costly to compute, so a lookup table is used to achieve this efficiently.
+
+The Gaussian lookup table is implemented using the \ac{CUDA} texture feature. Through the use of a normalized 1-dimensional array with clamping, a floating point number can be used to perform lookups in the table. For each pixel in a line, the distance to the closest lateral and longitudinal edge are both calculated as a ratio of half the width of the line. This distance is expressed as a floating point number and can be used directly when looking up the resulting intensity in the table.
+
+When drawing multiple colliding primitives, some strategy must be chosen to find the resulting colors. A popular strategy used with drawing is to use alpha compositing which depends on an alpha value for each pixel to describe its transparency. With alpha compositing there is a common way to divide the ways of composing two elements to be drawn called ``Porter Duff''. Ideally, at least two ``Porter Duff'' modes would be available to draw the Pink Floyd image well. The assignment specifies to use additive composition such that the white lines can be drawn by using lines of different colors which add up to a white color. However, with additive composition it is hard to draw the right section of the image well. The implementation provided uses the \textit{Over} composition mode to allow one component to be drawn over another correctly. This allows the right area of the image to be drawn well, and as a ``cheat'' the white lines are simply drawn by using white colors. One natural extension when writing a renderer would be to offer multiple/all ``Porter Duff'' modes to offer proper drawing.
+
+\textit{Reference: http://http.developer.nvidia.com/GPUGems2/gpugems2\_chapter22.html}
+
+\begin{figure}[p]
+\includegraphics[width=\linewidth,scale=0.1]{images/floyd}
+\caption{Pink Floyd 1000x1000 pixel rendering showing anti-aliasing}
+\label{figure:floyd}
+\end{figure}
 
 \end{document}
 
