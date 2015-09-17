@@ -5,6 +5,7 @@
 #include "lodepng.h"
 
 
+#include <cuda_runtime.h>
 
 #include <cmath>
 #include <fstream>
@@ -14,6 +15,45 @@
 #include <string>
 #include <vector>
 #include <utility>
+
+#define cuda_call(f, ...) \
+    cuda_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
+
+#define cuda_launch(kernel, grid_dim, block_dim, ...) \
+{ \
+    kernel<<<grid_dim, block_dim>>>(__VA_ARGS__); \
+    cuda_assert(cudaPeekAtLastError(), __FILE__, __LINE__, "kernel " #kernel " launch"); \
+}
+
+inline
+void
+cuda_assert(cudaError_t error, const char* file, const int line, const char* function)
+{
+    if (error)
+    {
+        throw std::runtime_error(std::string(function) + " failed: " + cudaGetErrorString(error));
+    }
+}
+
+#define cuda_print_function_attributes_(f) \
+    cuda_print_function_attributes(#f, (const void*)f)
+
+void
+cuda_print_function_attributes(const char* func_name, const void* func)
+{
+    cudaFuncAttributes attr;
+    cuda_call(cudaFuncGetAttributes, &attr, func);
+
+    std::cout << func_name << " cudaFuncAttributes"                   << std::endl;
+    std::cout << "  binaryVersion      : " << attr.binaryVersion      << std::endl;
+    std::cout << "  constSizeBytes     : " << attr.constSizeBytes     << std::endl;
+    std::cout << "  localSizeBytes     : " << attr.localSizeBytes     << std::endl;
+    std::cout << "  maxThreadsPerBlock : " << attr.maxThreadsPerBlock << std::endl;
+    std::cout << "  numRegs            : " << attr.numRegs            << std::endl;
+    std::cout << "  ptxVersion         : " << attr.ptxVersion         << std::endl;
+    std::cout << "  sharedSizeBytes    : " << attr.sharedSizeBytes    << std::endl;
+}
+
 
 struct rgb
 {
@@ -115,7 +155,7 @@ struct line
             &color_hsv.h, &color_hsv.v,
             buffer);
 
-        // Optional HSV saturation argument
+        // Optional saturation argument
         if (!((elements == 7) ||
               (elements == 8 && sscanf(buffer, ",%f", &color_hsv.s) == 1)))
         {
@@ -131,6 +171,26 @@ struct line
     }
 
     float x0, x1, y0, y1, thickness;
+    rgb color;
+};
+
+struct vec3
+{
+    vec3() : x(), y(), z() { }
+    vec3(float x, float y, float z) : x(x), y(y), z(z) { }
+
+    float
+    dot(const vec3& v) const
+    {
+        return x * v.x + y * v.y + z * v.z;
+    }
+
+    float x, y, z;
+};
+
+struct line_draw_info
+{
+    vec3 e0, e1, e2, e3;
     rgb color;
 };
 
@@ -165,30 +225,28 @@ struct geometry
     {
         std::ifstream input_file(filename.c_str());
 
+        int line = 0;
+
         std::string input_file_line;
         while (std::getline(input_file, input_file_line))
         {
-            if (input_file_line.find("line") == 0)
+            if (line == 0)
+            {
+                if (sscanf(input_file_line.c_str(), "%d,%d", &width, &height) != 2)
+                {
+                    throw std::runtime_error("invalid width/height in input file");
+                }
+            }
+            else if (input_file_line.find("line") == 0)
             {
                 lines.push_back(line::parse(input_file_line));
             }
+            ++line;
         }
     }
 
+    int width, height;
     std::vector<line> lines;
-};
-
-struct vec3
-{
-    vec3(float x, float y, float z) : x(x), y(y), z(z) { }
-
-    float
-    dot(const vec3& v) const
-    {
-        return x * v.x + y * v.y + z * v.z;
-    }
-
-    float x, y, z;
 };
 
 std::ostream&
@@ -202,139 +260,124 @@ operator<<(std::ostream& os, const vec3& v)
     return os;
 }
 
-/*
-struct vec3{
-	float x,y,z;
-};
+texture<float, 1, cudaReadModeElementType> gaussian_lut;
+cudaArray* gaussian_lut_cuda_array;
 
-void drawFigures(struct LineInfo * gpulines, const int lines, struct CircleInfo * gpucircles, const int circles, unsigned char * image, int height, int width, float*floatimg, struct vec3 blockIdx, struct vec3 threadIdx){
-}
-
-
-
-
-void  parseCircle(char * line, struct CircleInfo ci[], size_t *circles){
-  float x,y,radius;
-  struct Color c;
-  int items = sscanf(line, "circle %f,%f %f %f,%f", &x,&y,&radius, &c.angle, &c.intensity);
-  if ( 5==items){
-    ci[*circles].x = x;
-    ci[*circles].y = y;
-    ci[*circles].radius = radius;
-    ci[*circles].color.angle = c.angle;
-    ci[*circles].color.intensity = c.intensity;
-    (*circles)++;
-  }
-}
-
-
-void printLines(struct LineInfo li[], size_t lines){
-  for ( int i = 0 ; i < lines ; i++){
-    printf("line:  from:%f,%f to:%f,%f thick:%f,  %f,%f\n", li[i].x0, li[i].y0, li[i].x1, li[i].y1, li[i].thickness,li[i].color.angle, li[i].color.intensity);
-  }
-}
-
-void printCircles(struct CircleInfo ci[], size_t circles){
-  for ( int i = 0 ; i < circles ; i++){
-    printf("circle %f,%f %f %f,%f\n", ci[i].x,ci[i].y,ci[i].radius, ci[i].color.angle, ci[i].color.intensity);
-  }
-}
-
-*/
-
-
-float
-gaz(float x)
+__global__
+void
+woot(unsigned char* image,
+     const line_draw_info* info, const int index,
+     const int width, const int height)
 {
-    return std::exp(-std::pow(1.0 - x, 10) / 0.5);
-}
+    info = info + index;
 
+    const int x = blockIdx.x * 25 + threadIdx.x;
+    const int y = blockIdx.y * 25 + threadIdx.y;
 
-float
-goat(float x)
-{
-    return x < 1.0 ? gaz(x) : 1.0;
+    const float sx = (float)x / width;
+    const float sy = (float)y / height;
+
+    const float d0 = sx * info->e0.x + sy * info->e0.y + info->e0.z;
+    const float d1 = sx * info->e1.x + sy * info->e1.y + info->e1.z;
+    const float d2 = sx * info->e2.x + sy * info->e2.y + info->e2.z;
+    const float d3 = sx * info->e3.x + sy * info->e3.y + info->e3.z;
+
+    //printf("%d %d %d\n", info->e0.x, info->e0.y, info->e0.z);
+
+    if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
+    {
+        unsigned char* pixel = image + 4 * (y * width + x);
+        
+        const float alpha = tex1D(gaussian_lut, d0 < d2 ? d0 : d2) *
+                            tex1D(gaussian_lut, d1 < d3 ? d1 : d3);
+
+        float b_r = pixel[0] / 255.0f;
+        float b_g = pixel[1] / 255.0f;
+        float b_b = pixel[2] / 255.0f;
+        float b_a = pixel[3] / 255.0f;
+
+        float r = info->color.r * alpha + b_r * (1.0 - alpha);
+        float g = info->color.g * alpha + b_g * (1.0 - alpha);
+        float b = info->color.b * alpha + b_b * (1.0 - alpha);
+        float a = alpha + b_a * (1.0 - alpha);
+
+        pixel[0] = static_cast<unsigned char>(255.0f * r);
+        pixel[1] = static_cast<unsigned char>(255.0f * g),
+        pixel[2] = static_cast<unsigned char>(255.0f * b);
+        pixel[3] = static_cast<unsigned char>(255.0f * a);
+    }
 }
 
 void
-combine(unsigned char* pixel,
-        float a_r,
-        float a_g,
-        float a_b,
-        float a_a)
+gaussian_lut_construct()
 {
-    float b_r = pixel[0] / 255.0f;
-    float b_g = pixel[1] / 255.0f;
-    float b_b = pixel[2] / 255.0f;
-    float b_a = pixel[3] / 255.0f;
+    float gaussian_filter[32];
+    const int steps = sizeof(gaussian_filter) / sizeof(gaussian_filter[0]);
 
-    float r = a_r + b_r * (1.0 - a_a);
-    float g = a_g + b_g * (1.0 - a_a);
-    float b = a_b + b_b * (1.0 - a_a);
-    float a = a_a + b_a * (1.0 - a_a);
+    // Calculate lookup table
+    for (int i = 0; i != steps; ++i)
+    {
+        gaussian_filter[i] = std::exp(-std::pow(1.0 - i / 32.0f, 10) / 0.5);
+    }
 
-    pixel[0] = static_cast<unsigned char>(std::min(255.0f, 255.0f * r));
-    pixel[1] = static_cast<unsigned char>(std::min(255.0f, 255.0f * g)),
-    pixel[2] = static_cast<unsigned char>(std::min(255.0f, 255.0f * b));
-    pixel[3] = static_cast<unsigned char>(std::min(255.0f, 255.0f * a));
+    // Allocate CUDA array in device memory
+    cudaChannelFormatDesc channelDesc = 
+        cudaCreateChannelDesc(steps, 0, 0, 0, cudaChannelFormatKindFloat);
+
+    cuda_call(cudaMallocArray, &gaussian_lut_cuda_array, &channelDesc, steps);
+
+    // Copy to device memory some data located at address h_data in host memory 
+    cuda_call(cudaMemcpyToArray, gaussian_lut_cuda_array, 0, 0, gaussian_filter, sizeof(gaussian_filter), cudaMemcpyHostToDevice);
+    
+    // Set texture reference parameters
+    gaussian_lut.addressMode[0] = cudaAddressModeClamp;
+    gaussian_lut.filterMode     = cudaFilterModePoint;
+    gaussian_lut.normalized     = true;
+    
+    // Bind the array to the texture reference
+    cuda_call(cudaBindTextureToArray, gaussian_lut, gaussian_lut_cuda_array, channelDesc);
 }
 
 void
-blend  (unsigned char* pixel,
-        float a_r,
-        float a_g,
-        float a_b,
-        float a_a)
+gaussian_lut_destroy()
 {
-    float b_r = pixel[0] / 255.0f;
-    float b_g = pixel[1] / 255.0f;
-    float b_b = pixel[2] / 255.0f;
-    float b_a = pixel[3] / 255.0f;
-
-    float a = std::min(1.0f, a_a + b_a);
-
-    float r = (a_r + b_r) / a;
-    float g = (a_g + b_g) / a;
-    float b = (a_b + b_b) / a;
-
-    pixel[0] = static_cast<unsigned char>(std::min(255.0f, 255.0f * r));
-    pixel[1] = static_cast<unsigned char>(std::min(255.0f, 255.0f * g)),
-    pixel[2] = static_cast<unsigned char>(std::min(255.0f, 255.0f * b));
-    pixel[3] = static_cast<unsigned char>(std::min(255.0f, 255.0f * a));
+    // Free device memory
+    cuda_call(cudaFreeArray, gaussian_lut_cuda_array);
 }
 
 int
 main(const int argc, const char* argv[])
 {
-    const int width  = 300;
-    const int height = 300;
-
     geometry g("floyd.txt");
+    std::vector<line_draw_info> lines(g.lines.size());
 
-    std::vector<unsigned char> image(width * height * 4, 0);
+    const std::size_t image_total_bytes = g.height * g.width * 4;
 
-    for (int x = 0; x != width; ++x)
+    gaussian_lut_construct();
+
+    std::vector<unsigned char> image(image_total_bytes);
+
+    for (int i = 3; i < image_total_bytes; i += 4)
     {
-        for (int y = 0; y != height; ++y)
-        {
-            unsigned char* pixel = &image.front() + 4 * (y * width + x);
-            pixel[0] = 0;
-            pixel[1] = 0;
-            pixel[2] = 0;
-            pixel[3] = 255;
-        }
+        image[i] = 255;
     }
+    
+    void* device_image_area;
+    cuda_call(cudaMalloc, &device_image_area, image_total_bytes);
+    
+    cuda_call(cudaMemcpy,
+              device_image_area, &image.front(),
+              image_total_bytes, cudaMemcpyHostToDevice);
 
-    float m1 = 0.0f, m2 = 0.0f;
+    void* device_lines;
+    cuda_call(cudaMalloc, &device_lines, lines.size() * sizeof(line_draw_info));
 
+    int i = 0;
     for (std::vector<line>::iterator line = g.lines.begin();
          line != g.lines.end();
-         ++line)
+         ++line, ++i)
     {
-        std::cout << *line << std::endl;
-
-        std::swap(line->x0, line->x1);
-        std::swap(line->y0, line->y1);
+        line_draw_info& info = lines[i];
 
         const float r        = line->thickness / 10.0f;
         const float x_diff_a = line->x0 - line->x1;
@@ -343,79 +386,104 @@ main(const int argc, const char* argv[])
         const float y_diff_b = line->y1 - line->y0;
 
         const float length = std::sqrt(std::abs(x_diff_a * x_diff_a - y_diff_a * y_diff_a));
-
+        
         const float k = 2.0f / ((2.0f * r + line->thickness) * length);
 
-        const vec3 e0(k * (line->y0 - line->y1),
-                      k * (line->x1 - line->x0),
-                      1 + k * (line->x0 * line->y1 - line->x1 * line->y0));
-        const vec3 e1(k * (line->x1 - line->x0),
-                      k * (line->y1 - line->y0),
-                      1 + k * (line->x0 * line->x0 +
-                               line->y0 * line->y0 -
-                               line->x0 * line->x1 -
-                               line->y0 * line->y1));
-        const vec3 e2(k * (line->y1 - line->y0),
-                      k * (line->x0 - line->x1),
-                      1 + k * (line->x1 * line->y0 - line->x0 * line->y1));
-        const vec3 e3(k * (line->x0 - line->x1),
-                      k * (line->y0 - line->y1),
-                      1 + k * (line->x1 * line->x1 +
-                               line->y1 * line->y1 -
-                               line->x0 * line->x1 -
-                               line->y0 * line->y1));
+        info.color = line->color;
 
-        for (int x = 0; x != width; ++x)
-        {
-            for (int y = 0; y != height; ++y)
-            {
-                const float sx = (float)x / width;
-                const float sy = (float)y / height;
+        info.e0 = vec3(k * (line->y0 - line->y1),
+                       k * (line->x1 - line->x0),
+                       1 + k * (line->x0 * line->y1 - line->x1 * line->y0));
 
-                const vec3 v(sx, sy, 1);
+        info.e1 = vec3(k * (line->x1 - line->x0),
+                       k * (line->y1 - line->y0),
+                       1 + k * (line->x0 * line->x0 +
+                                line->y0 * line->y0 -
+                                line->x0 * line->x1 -
+                                line->y0 * line->y1));
 
-                const float d0 = v.dot(e0);
-                const float d1 = v.dot(e1);
-                const float d2 = v.dot(e2);
-                const float d3 = v.dot(e3);
+        info.e2 = vec3(k * (line->y1 - line->y0),
+                       k * (line->x0 - line->x1),
+                       1 + k * (line->x1 * line->y0 - line->x0 * line->y1));
 
-                if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
-                {
-                    m1 = std::max(m1, std::min(d0, d2));
-                    m2 = std::max(m2, std::min(d1, d3));
-                    unsigned char* pixel = &image.front() + 4 * (y * width + x);
-                    
-                    const float alpha = gaz(std::min(d0, d2)) * goat(std::min(d1, d3));
+        info.e3 = vec3(k * (line->x0 - line->x1),
+                       k * (line->y0 - line->y1),
+                       1 + k * (line->x1 * line->x1 +
+                                line->y1 * line->y1 -
+                                line->x0 * line->x1 -
+                                line->y0 * line->y1));
 
-                    combine(pixel,
-                            alpha * line->color.r, 
-                            alpha * line->color.g,
-                            alpha * line->color.b,
-                            alpha);
-
-                    //pixel[0] = static_cast<unsigned char>(255.0f * (r + pixel[0] / 255.0f * (1.0f - r)));
-                    //pixel[1] = static_cast<unsigned char>(255.0f * (g + pixel[1] / 255.0f * (1.0f - g)));
-                    //pixel[2] = static_cast<unsigned char>(255.0f * (b + pixel[2] / 255.0f * (1.0f - b)));
-                    //pixel[3] = static_cast<unsigned char>(255.0f * (intensity + pixel[3] / 255.0f * (1.0f - intensity)));
-                }
-            }
-        }
+//        for (int x = 0; x != width; ++x)
+//        {
+//            for (int y = 0; y != height; ++y)
+//            {
+//                const float sx = (float)x / width;
+//                const float sy = (float)y / height;
+//
+//                const vec3 v(sx, sy, 1);
+//
+//                const float d0 = v.dot(e0);
+//                const float d1 = v.dot(e1);
+//                const float d2 = v.dot(e2);
+//                const float d3 = v.dot(e3);
+//
+//                if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
+//                {
+//                    unsigned char* pixel = &image.front() + 4 * (y * width + x);
+//                   /*jj 
+//                    const float alpha = lookup[static_cast<int>(std::floor(std::min(d0, d2) * 32.0f))] *
+//                                        lookup[static_cast<int>(std::floor(std::min(d1, d3) * 32.0f))];
+//*/
+//                    const float alpha = 1.0;
+//
+//                    combine(pixel,
+//                            alpha * line->color.r, 
+//                            alpha * line->color.g,
+//                            alpha * line->color.b,
+//                            alpha);
+//                }
+//            }
+//        }
     }
 
-//    for (int x = 0; x != width; ++x)
-//    {
-//        for (int y = 0; y != height; ++y)
-//        {
-//            unsigned char* pixel = &image.front() + 4 * (y * width + x);
-//            pixel[0] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[0] / pixel[3]));
-//            pixel[1] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[1] / pixel[3]));
-//            pixel[2] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[2] / pixel[3]));
-//            pixel[3] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[3] / pixel[3]));
-//        }
-//    }
+    //for (int x = 0; x != width; ++x)
+    //{
+    //    for (int y = 0; y != height; ++y)
+    //    {
+    //        unsigned char* pixel = &image.front() + 4 * (y * width + x);
+    //        pixel[0] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[0] / pixel[3]));
+    //        pixel[1] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[1] / pixel[3]));
+    //        pixel[2] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[2] / pixel[3]));
+    //        pixel[3] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[3] / pixel[3]));
+    //    }
+    //}
 
-    std::cout << "m1 = " << m1 << ", m2 = " << m2 << std::endl;
+    cuda_call(cudaMemcpy,
+              device_lines, &lines.front(),
+              lines.size() * sizeof(line_draw_info), cudaMemcpyHostToDevice);
 
-    lodepng::encode("floyd.png", image, width, height);
+    for (int i = 0; i != lines.size(); ++i)
+    {
+        dim3 gridSize(12, 12);
+        dim3 blockSize(25,25);
+
+        cuda_launch(woot, gridSize, blockSize,
+            (unsigned char*)device_image_area,
+            (const line_draw_info*)device_lines,
+            i,
+            g.width, g.height);
+
+        cuda_call(cudaDeviceSynchronize);
+    }
+
+    cuda_call(cudaMemcpy,
+              &image.front(), device_image_area,
+              image_total_bytes, cudaMemcpyDeviceToHost);
+
+    cuda_call(cudaFree, device_lines);
+    cuda_call(cudaFree, device_image_area);
+    gaussian_lut_destroy();
+
+    lodepng::encode("floyd.png", image, g.width, g.height);
 }
 
