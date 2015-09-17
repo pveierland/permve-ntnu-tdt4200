@@ -188,9 +188,11 @@ Figure \ref{figure:gridblock} shows that a \textit{block} is composed of a set o
 
 \item \textbf{In the CUDA file \texttt{lenna.cu} implement a kernel which performs the same job as the executable \texttt{cpu\_version} does. The additionally required setup of memory and variables, freeing of the same, and transfers wrt. to the CUDA kernel are also required.}
 
-The ``Lenna'' task is to invert each pixel in a $512 \times 512$ pixel RGB-image. The first realization we can make is to see that the image can be seen as array of data with a size of $512 \cdot 512 \cdot 3~\text{\footnotesize bytes} = 786432~\text{\footnotesize bytes}$ and that the data does not need to be processed as individual pixels.
+The ``Lenna'' task is to invert each pixel in a $512 \times 512$ pixel RGB-image. This task does not involve any composition of sub-results, each byte in the image needs only to be inverted once without any consideration of other pixels.
 
-When building a \ac{CUDA} program from a serial program one must consider how to parallelize the program efficiently. This requires taking into account the available hardware. The hardware provided with each workstation in the Tulip lab is a \textit{GeForce GTX 750 Ti} graphics card with a Maxwell GM107 \ac{GPU}. The GM107 \ac{GPU} has 5 \acp{SM}, each with 4 distinct blocks having separate instruction buffers, warp schedulers and containing 32 \ac{CUDA} cores. In total the \ac{GPU} has 640 \ac{CUDA} cores.
+The first realization we can make is to see that the image can be seen as array of data with a size of $512 \cdot 512 \cdot 3$~bytes = $786432$~bytes and that the data does not need to be processed as individual pixels.
+
+When building a \ac{CUDA} program from a serial program one must consider how to parallelize the program efficiently. This requires taking into account the available hardware. The hardware provided with each workstation in the Tulip lab is a \textit{GeForce GTX 750 Ti} graphics card with a Maxwell GM107 \ac{GPU}. The GM107 \ac{GPU} has 5 \acp{SM}, each with 4 distinct blocks each having an instruction buffers, warp scheduler and 32 \ac{CUDA} cores. In total the \ac{GPU} has 640 \ac{CUDA} cores.
 
 The first idea to efficiently use the hardware was to have the largest possible number of fixed warps in execution. Using 20 warps of 32 threads all warp schedulers and \ac{CUDA} cores of the hardware should be kept active at the same time. The data is processed by 20 warps for 153 iterations, plus having the 12 first warps perform 1 extra iteration. Splitting the branching across a warp boundary should avoid warp divergence for the last iteration. The \ac{GPU} memory bus width is 128 bits and each thread will process 64 consecutive bits from memory at a time for optimal coalescence.
 
@@ -198,28 +200,9 @@ The first idea to efficiently use the hardware was to have the largest possible 
 (153~\frac{\text{\footnotesize iterations}}{\text{\footnotesize thread}} \cdot 20~\text{\footnotesize warps} \cdot 32~\frac{\text{\footnotesize threads}}{\text{\footnotesize warp}} + 1~\frac{\text{\footnotesize iterations}}{\text{\footnotesize thread}} \cdot 12~\text{\footnotesize warps} \cdot 32~\frac{\text{\footnotesize threads}}{\text{\footnotesize warp}}) \cdot 8~\text{\footnotesize bytes} = 786432~\text{\footnotesize bytes}
 \end{displaymath}
 
-The results from this program is shown in Figure~\ref{figure:lenna_1}. An initial call to \texttt{cudaFree(0)} is used at the start of the program to eliminate \ac{CUDA} context initialization costs from the timing measurements.
+Averaged over 50 runs, the kernel execution time for the first approach is 40.19~us. An initial call to \texttt{cudaFree(0)} is used at the start of the program to eliminate \ac{CUDA} context initialization costs from the timing measurements.
 
-\begin{figure}
-\begin{tikzpicture}
-\begin{axis}[xlabel={Program run},ylabel={Running time [us]},legend pos=outer north east,legend style={font=\footnotesize}]
-\addplot table[x index=0,y index=1,col sep=comma] {../data/lenna_20_32.txt};
-\addplot table[x index=0,y index=2,col sep=comma] {../data/lenna_20_32.txt};
-\addplot table[x index=0,y index=3,col sep=comma] {../data/lenna_20_32.txt};
-\addplot table[x index=0,y index=4,col sep=comma] {../data/lenna_20_32.txt};
-\addplot table[x index=0,y index=5,col sep=comma] {../data/lenna_20_32.txt};
-\addlegendentry{cudaMalloc}
-\addlegendentry{cudaMemcpyHostToDevice}
-\addlegendentry{invert\_pixels}
-\addlegendentry{cudaMemcpyDeviceToHost}
-\addlegendentry{cudaFree}
-\end{axis}
-\end{tikzpicture}
-\caption{Lenna program \#1 -- 20 blocks of 32 threads}
-\label{figure:lenna_1}
-\end{figure}
-
-One problem with this first approach is that the occupancy is very low. When using the \textit{CUDA Occupancy Calculator} from Nvidia the estimated occupancy of each \ac{SM} was only 17\%, given the following values:
+One problem with the first approach is that the occupancy is very low. When using the \textit{CUDA Occupancy Calculator} from Nvidia the estimated occupancy of each \ac{SM} was only 17\%, given the following values:
 
 \begin{itemize}
 \item Compute capability: 2.1
@@ -229,13 +212,13 @@ One problem with this first approach is that the occupancy is very low. When usi
 \item Shared memory per block: 0
 \end{itemize}
 
-To improve the Lenna timing values a second program is written to accomplish a higher occupancy rate. Luckily, 386 blocks with 256 threads each perfectly divides the number of bytes we wish to process by 8:
+To improve upon the first attempt, a second program is written to accomplish a higher occupancy rate. Conveniently, 386 blocks with 256 threads each perfectly divides the number of bytes we wish to process by 8:
 
 \begin{displaymath}
 384~\text{\footnotesize blocks} \cdot 256~\frac{\text{\footnotesize threads}}{\text{\footnotesize block}} \cdot 8~\frac{\text{\footnotesize bytes}}{\text{\footnotesize thread}} = 786432~\text{\footnotesize bytes}
 \end{displaymath}
 
-This means that each thread only needs to calculate the complement of a single 64-bit integer. Reapplying the \textit{CUDA Occupancy Calculator} with the updated values gives an estimated occupancy each \ac{SM} of 100\%. The results from running the second program is shown in Figure~\ref{figure:lenna_2}.
+This means that each thread only needs to calculate the complement of a single 64-bit integer. Reapplying the \textit{CUDA Occupancy Calculator} with the updated values gives an estimated occupancy of each \ac{SM} of 100\%. The averaged running time over 50 runs for the second kernel is 14.71~us.
 
 \begin{itemize}
 \item Compute capability: 2.1
@@ -245,32 +228,120 @@ This means that each thread only needs to calculate the complement of a single 6
 \item Shared memory per block: 0
 \end{itemize}
 
-The second approach shows an improvement from approximately 110~us to 82~us for the kernel execution time.
+According to Nvidia the GM107 \ac{GPU} has a theoretical memory bandwidth of 86.4~GB/s (Note! $86.4 \cdot 10^6$, not $86.4 \cdot 1024^3$). The effective bandwidth utilized by the second kernel can be calculated as:
 
-\begin{figure}
-\begin{tikzpicture}
-\begin{axis}[xlabel={Program run},ylabel={Running time [us]},legend pos=outer north east,legend style={font=\footnotesize}]
-\addplot table[x index=0,y index=1,col sep=comma] {../data/lenna_384_256.txt};
-\addplot table[x index=0,y index=2,col sep=comma] {../data/lenna_384_256.txt};
-\addplot table[x index=0,y index=3,col sep=comma] {../data/lenna_384_256.txt};
-\addplot table[x index=0,y index=4,col sep=comma] {../data/lenna_384_256.txt};
-\addplot table[x index=0,y index=5,col sep=comma] {../data/lenna_384_256.txt};
-\addlegendentry{cudaMalloc}
-\addlegendentry{cudaMemcpyHostToDevice}
-\addlegendentry{invert\_pixels}
-\addlegendentry{cudaMemcpyDeviceToHost}
-\addlegendentry{cudaFree}
-\end{axis}
-\end{tikzpicture}
-\caption{Lenna program \#2 -- 384 blocks of 256 threads}
-\label{figure:lenna_2}
-\end{figure}
+\begin{displaymath}
+\textit{BW}_\text{effective} = \frac{R_B + W_B}{t_K} = \frac{2 \cdot (512 * 512 * 3\text{~bytes})}{14.71~\text{us}} = 106.92~\text{GB/s}
+\end{displaymath}
+
+Where $R_B$ is the number of bytes read from memory, $W_B$ is the number of bytes written to memory, and $t_K$ is the kernel execution time. An exact reason for why this number exceeds the theoretical bandwidth is unknown. A hypothetical kernel achieving maximum bandwidth usage should have spent 18.20~us for the given amount of data.
+
+\textit{Reference: http://devblogs.nvidia.com/parallelforall/how-implement-performance-metrics-cuda-cc/}
 
 \item \textbf{Implement a \texttt{make cuda} makefile rule which compiles (but does not execute) the CUDA executable \texttt{gpu\_version}.}
 
-A \texttt{make cuda} rule has been added to the provided \texttt{Makefile}.
+A \texttt{cuda} rule has been added to the provided \texttt{Makefile}.
 
 \item \textbf{Time the transfers of data to and from device, and report the percentage of total program run-time the transfers require. How would you suggest to improve this percentage?}
+
+After measuring the program running time it is evident that the majority of the program is spent on decoding the input image, creating the \ac{CUDA} context, and encoding the output image, see Table~\ref{table:lenna_runtime_distribution}. The measurements are a result of averaging 50 program runs. Compared to the entire program, only 0.12\% is spent on copying the input image to the device and 0.11\% is spent on copying the output image from the device.
+
+When discounting the input image decoding, the \ac{CUDA} context initialization and the output image encoding from the consideration, the copying of the input image to the device takes 29\% of the runtime, and copying the output image from the device takes 26\% of the runtime. Whether spending more or less time of the program runtime on copying data to and from the device is ideal would depend on the problem being solved. Spending much of the runtime on copying might mean that the problem is being solved very efficiently on the \ac{GPU}. However we shall assume that it would be considered more ideal if less of the relative runtime is spent on copying and more is spent on actual computation.
+
+Achieving this can be done by increasing the amount of data transferred to the device, and by increasing the complexity of the computation performed on the \ac{GPU}. Increasing the amount of data transferred to the device above a certain threshold will help eliminate overhead associated with the copying operation and the cost will be a more direct function of the amount of data transferred. Increasing the complexity of the computation performed will help the most by directly increasing the time of the program spent performing actual computation. For the given scenario there is no current suggestion as to how this could be achieved since the specified computation involves very cheap operations.
+
+\begin{table}
+\begin{tabular}{rrll}
+Percent of program & Total time (us) & Description            & Function \\
+\hline
+50.8860\%          &  78228.54       & Encode output image    & \texttt{lodepng::encode} \\
+37.3701\%          &  57450.24       & Create CUDA context    & \texttt{cudaFree(0)} \\
+11.3247\%          &  17409.84       & Decode input image     & \texttt{lodepng::decode} \\
+ 0.1241\%          &    192.88       & Copy image to device   & \texttt{cudaMemcpyHostToDevice} \\
+ 0.1089\%          &    167.38       & Copy image from device & \texttt{cudaMemcpyDeviceToHost} \\
+ 0.1016\%          &    156.19       & Allocate device memory & \texttt{cudaMalloc} \\
+ 0.0683\%          &    104.93       & Free device memory     & \texttt{cudaFree} \\
+ 0.0096\%          &     14.71       & Invert pixels kernel   & \texttt{invert\_pixels} \\
+\end{tabular}
+\caption{Lenna program 384 blocks / 256 threads -- Runtime distribution}
+\label{table:lenna_runtime_distribution}
+\end{table}
+
+\begin{figure}
+\def\angle{0}
+\def\radius{3}
+\def\cyclelist{{"orange","blue","red","green","purple","yellow"}}
+\newcount\cyclecount \cyclecount=-1
+\newcount\ind \ind=-1
+\begin{tikzpicture}[nodes = {font=\sffamily}]
+\foreach \percent/\name in {
+11.32/lodepng::decode (17.4~ms),
+37.37/Initialize CUDA context (57.5~ms),
+50.89/lodepng::encode (78.2~ms),
+0.42/Device malloc + free + copy + kernel
+} {
+\ifx\percent\empty\else               % If \percent is empty, do nothing
+\global\advance\cyclecount by 1     % Advance cyclecount
+\global\advance\ind by 1            % Advance list index
+\ifnum5<\cyclecount                 % If cyclecount is larger than list
+\global\cyclecount=0              %   reset cyclecount and
+\global\ind=0                     %   reset list index
+\fi
+\pgfmathparse{\cyclelist[\the\ind]} % Get color from cycle list
+\edef\color{\pgfmathresult}         %   and store as \color
+% Draw angle and set labels
+\draw[fill={\color!50},draw={\color}] (0,0) -- (\angle:\radius)
+arc (\angle:\angle+\percent*3.6:\radius) -- cycle;
+\node at (\angle+0.5*\percent*3.6:0.7*\radius) {\percent\,\%};
+\node[pin=\angle+0.5*\percent*3.6:\name]
+at (\angle+0.5*\percent*3.6:\radius) {};
+\pgfmathparse{\angle+\percent*3.6}  % Advance angle
+\xdef\angle{\pgfmathresult}         %   and store in \angle
+\fi
+};
+\end{tikzpicture}
+\caption{Lenna program 384 blocks / 256 threads -- Total program runtime distribution}
+\label{figure:lenna_total_pie}
+\end{figure}
+
+\begin{figure}
+\def\angle{0}
+\def\radius{3}
+\def\cyclelist{{"orange","blue","red","green","purple","yellow"}}
+\newcount\cyclecount \cyclecount=-1
+\newcount\ind \ind=-1
+\begin{tikzpicture}[nodes = {font=\sffamily}]
+\foreach \percent/\name in {
+24.23/cudaMalloc (156.2 us),
+29.61/cudaMemcpyHostToDevice (190.9 us),
+2.28/invert\_pixels (14.7 us),
+25.97/cudaMemcpyDeviceToHost (167.4 us),
+16.28/cudaFree (104.9 us),
+1.63/Other
+} {
+\ifx\percent\empty\else               % If \percent is empty, do nothing
+\global\advance\cyclecount by 1     % Advance cyclecount
+\global\advance\ind by 1            % Advance list index
+\ifnum5<\cyclecount                 % If cyclecount is larger than list
+\global\cyclecount=0              %   reset cyclecount and
+\global\ind=0                     %   reset list index
+\fi
+\pgfmathparse{\cyclelist[\the\ind]} % Get color from cycle list
+\edef\color{\pgfmathresult}         %   and store as \color
+% Draw angle and set labels
+\draw[fill={\color!50},draw={\color}] (0,0) -- (\angle:\radius)
+arc (\angle:\angle+\percent*3.6:\radius) -- cycle;
+\node at (\angle+0.5*\percent*3.6:0.7*\radius) {\percent\,\%};
+\node[pin=\angle+0.5*\percent*3.6:\name]
+at (\angle+0.5*\percent*3.6:\radius) {};
+\pgfmathparse{\angle+\percent*3.6}  % Advance angle
+\xdef\angle{\pgfmathresult}         %   and store in \angle
+\fi
+};
+\end{tikzpicture}
+\caption{Lenna program 384 blocks / 256 threads -- CUDA runtime distribution}
+\label{figure:lenna_cuda_pie}
+\end{figure}
 
 \end{enumerate}
 
