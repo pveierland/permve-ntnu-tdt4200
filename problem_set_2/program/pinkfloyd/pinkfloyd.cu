@@ -222,6 +222,11 @@ struct geometry
     {
         std::ifstream input_file(filename.c_str());
 
+        if (!input_file)
+        {
+            throw std::runtime_error("failed to open input file: " + filename);
+        }
+
         int line = 0;
 
         std::string input_file_line;
@@ -385,76 +390,84 @@ gaussian_lut_destroy()
 int
 main(const int argc, const char* argv[])
 {
-    geometry g("floyd.txt");
-
-    const std::size_t image_total_bytes = g.height * g.width * 4;
-
-    gaussian_lut_construct();
-
-    std::vector<unsigned char> image(image_total_bytes);
-
-    // Initialize image alpha values
-    for (int i = 3; i < image_total_bytes; i += 4)
+    try
     {
-        image[i] = 255;
-    }
+        geometry g("input_tdsotm.txt");
     
-    void* device_image_area;
-    cuda_call(cudaMalloc, &device_image_area, image_total_bytes);
+        const std::size_t image_total_bytes = g.height * g.width * 4;
     
-    cuda_call(cudaMemcpy,
-              device_image_area, &image.front(),
-              image_total_bytes, cudaMemcpyHostToDevice);
-
-    void* device_lines;
-    cuda_call(cudaMalloc, &device_lines, g.lines.size() * sizeof(line));
-
-    cuda_call(cudaMemcpy,
-              device_lines, &g.lines.front(),
-              g.lines.size() * sizeof(line), cudaMemcpyHostToDevice);
+        gaussian_lut_construct();
     
-    cuda_launch(calculate_line_equations, 1, g.lines.size(), (line*)device_lines);
+        std::vector<unsigned char> image(image_total_bytes);
     
-    const std::size_t number_of_streams =
-        (g.width * g.height + image_chunk_size * image_chunk_size - 1) /
-        (image_chunk_size * image_chunk_size);
-
-    std::vector<cudaStream_t> streams(number_of_streams);
-
-    for (int s = 0; s != number_of_streams; ++s)
-    {
-        cuda_call(cudaStreamCreate, &streams[s]);
-    }
-
-    for (int l = 0; l != g.lines.size(); ++l)
-    {
+        // Initialize image alpha values
+        for (int i = 3; i < image_total_bytes; i += 4)
+        {
+            image[i] = 255;
+        }
+        
+        void* device_image_area;
+        cuda_call(cudaMalloc, &device_image_area, image_total_bytes);
+        
+        cuda_call(cudaMemcpy,
+                  device_image_area, &image.front(),
+                  image_total_bytes, cudaMemcpyHostToDevice);
+    
+        void* device_lines;
+        cuda_call(cudaMalloc, &device_lines, g.lines.size() * sizeof(line));
+    
+        cuda_call(cudaMemcpy,
+                  device_lines, &g.lines.front(),
+                  g.lines.size() * sizeof(line), cudaMemcpyHostToDevice);
+        
+        cuda_launch(calculate_line_equations, 1, g.lines.size(), (line*)device_lines);
+        
+        const std::size_t number_of_streams =
+            (g.width * g.height + image_chunk_size * image_chunk_size - 1) /
+            (image_chunk_size * image_chunk_size);
+    
+        std::vector<cudaStream_t> streams(number_of_streams);
+    
         for (int s = 0; s != number_of_streams; ++s)
         {
-            cuda_launch_stream(draw_line,
-                               image_chunk_size,
-                               image_chunk_size,
-                               streams[s],
-                               (unsigned char*)device_image_area,
-                               (const line*)device_lines + l,
-                               s,
-                               g.width,
-                               g.height);
+            cuda_call(cudaStreamCreate, &streams[s]);
         }
+    
+        for (int l = 0; l != g.lines.size(); ++l)
+        {
+            for (int s = 0; s != number_of_streams; ++s)
+            {
+                cuda_launch_stream(draw_line,
+                                   image_chunk_size,
+                                   image_chunk_size,
+                                   streams[s],
+                                   (unsigned char*)device_image_area,
+                                   (const line*)device_lines + l,
+                                   s,
+                                   g.width,
+                                   g.height);
+            }
+        }
+    
+        cuda_call(cudaMemcpy,
+                  &image.front(), device_image_area,
+                  image_total_bytes, cudaMemcpyDeviceToHost);
+    
+        for (int s = 0; s != number_of_streams; ++s)
+        {
+            cuda_call(cudaStreamDestroy, streams[s]);
+        }
+    
+        cuda_call(cudaFree, device_lines);
+        cuda_call(cudaFree, device_image_area);
+        gaussian_lut_destroy();
+    
+        lodepng::encode("floyd.png", image, g.width, g.height);
     }
-
-    cuda_call(cudaMemcpy,
-              &image.front(), device_image_area,
-              image_total_bytes, cudaMemcpyDeviceToHost);
-
-    for (int s = 0; s != number_of_streams; ++s)
+    catch (const std::runtime_error& e)
     {
-        cuda_call(cudaStreamDestroy, streams[s]);
+        std::cerr << e.what() << std::endl;
+        return 1;
     }
-
-    cuda_call(cudaFree, device_lines);
-    cuda_call(cudaFree, device_image_area);
-    gaussian_lut_destroy();
-
-    lodepng::encode("floyd.png", image, g.width, g.height);
 }
 
