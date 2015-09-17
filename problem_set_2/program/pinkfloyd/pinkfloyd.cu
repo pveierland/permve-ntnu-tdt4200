@@ -1,20 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <unistd.h>
 #include "lodepng.h"
-
-
 #include <cuda_runtime.h>
 
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <ostream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #define cuda_call(f, ...) \
     cuda_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
@@ -22,6 +17,12 @@
 #define cuda_launch(kernel, grid_dim, block_dim, ...) \
 { \
     kernel<<<grid_dim, block_dim>>>(__VA_ARGS__); \
+    cuda_assert(cudaPeekAtLastError(), __FILE__, __LINE__, "kernel " #kernel " launch"); \
+}
+
+#define cuda_launch_stream(kernel, grid_dim, block_dim, stream, ...) \
+{ \
+    kernel<<<grid_dim, block_dim, 0, stream>>>(__VA_ARGS__); \
     cuda_assert(cudaPeekAtLastError(), __FILE__, __LINE__, "kernel " #kernel " launch"); \
 }
 
@@ -53,7 +54,6 @@ cuda_print_function_attributes(const char* func_name, const void* func)
     std::cout << "  ptxVersion         : " << attr.ptxVersion         << std::endl;
     std::cout << "  sharedSizeBytes    : " << attr.sharedSizeBytes    << std::endl;
 }
-
 
 struct rgb
 {
@@ -136,6 +136,22 @@ hsv2rgb(hsv in)
     return out;     
 }
 
+struct vec3
+{
+    float x, y, z;
+};
+
+std::ostream&
+operator<<(std::ostream& os, const vec3& v)
+{
+    os << "vec3{x: " << v.x
+       << ", y: "    << v.y
+       << ", z: "    << v.z
+       << "}";
+
+    return os;
+}
+
 struct line
 {
     static
@@ -147,7 +163,7 @@ struct line
         char buffer[64] = {};
         hsv color_hsv   = { 1.0f, 255.0f, 255.0f };
 
-        const int elements = sscanf(
+        const int elements = std::sscanf(
             input.c_str(),
             "line %f,%f %f,%f %f %f,%f%s",
             &l.x0, &l.y0, &l.x1, &l.y1,
@@ -157,7 +173,7 @@ struct line
 
         // Optional saturation argument
         if (!((elements == 7) ||
-              (elements == 8 && sscanf(buffer, ",%f", &color_hsv.s) == 1)))
+              (elements == 8 && std::sscanf(buffer, ",%f", &color_hsv.s) == 1)))
         {
             throw std::runtime_error("invalid line element");
         }
@@ -172,26 +188,7 @@ struct line
 
     float x0, x1, y0, y1, thickness;
     rgb color;
-};
-
-struct vec3
-{
-    vec3() : x(), y(), z() { }
-    vec3(float x, float y, float z) : x(x), y(y), z(z) { }
-
-    float
-    dot(const vec3& v) const
-    {
-        return x * v.x + y * v.y + z * v.z;
-    }
-
-    float x, y, z;
-};
-
-struct line_draw_info
-{
     vec3 e0, e1, e2, e3;
-    rgb color;
 };
 
 std::ostream&
@@ -249,62 +246,102 @@ struct geometry
     std::vector<line> lines;
 };
 
-std::ostream&
-operator<<(std::ostream& os, const vec3& v)
-{
-    os << "vec3{x: " << v.x
-       << ", y: "    << v.y
-       << ", z: "    << v.z
-       << "}";
-
-    return os;
-}
+const std::size_t image_chunk_size = 64;
 
 texture<float, 1, cudaReadModeElementType> gaussian_lut;
 cudaArray* gaussian_lut_cuda_array;
 
 __global__
 void
-woot(unsigned char* image,
-     const line_draw_info* info, const int index,
-     const int width, const int height)
+calculate_line_equations(line* const lines)
 {
-    info = info + index;
+    line* const line = lines + threadIdx.x;
 
-    const int x = blockIdx.x * 25 + threadIdx.x;
-    const int y = blockIdx.y * 25 + threadIdx.y;
+    const float r        = line->thickness / 10.0f;
+    const float x_diff_a = line->x0 - line->x1;
+    const float x_diff_b = line->x1 - line->x0;
+    const float y_diff_a = line->y0 - line->y1;
+    const float y_diff_b = line->y1 - line->y0;
 
-    const float sx = (float)x / width;
-    const float sy = (float)y / height;
+    const float length = std::sqrt(std::abs(x_diff_a * x_diff_a - y_diff_a * y_diff_a));
+    
+    const float k = 2.0f / ((2.0f * r + line->thickness) * length);
 
-    const float d0 = sx * info->e0.x + sy * info->e0.y + info->e0.z;
-    const float d1 = sx * info->e1.x + sy * info->e1.y + info->e1.z;
-    const float d2 = sx * info->e2.x + sy * info->e2.y + info->e2.z;
-    const float d3 = sx * info->e3.x + sy * info->e3.y + info->e3.z;
+    const float x0x0 = line->x0 * line->x0;
+    const float x0x1 = line->x0 * line->x1;
+    const float x0y1 = line->x0 * line->y1;
+    const float x1x1 = line->x1 * line->x1;
+    const float x1y0 = line->x1 * line->y0;
+    const float y0y0 = line->y0 * line->y0;
+    const float y0y1 = line->y0 * line->y1;
+    const float y1y1 = line->y1 * line->y1;
 
-    if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
+    line->e0.x = k * y_diff_a;
+    line->e0.y = k * x_diff_b;
+    line->e0.z = 1.0f + k * (x0y1 - x1y0);
+
+    line->e1.x = k * x_diff_b;
+    line->e1.y = k * y_diff_b;
+    line->e1.z = 1.0f + k * (x0x0 + y0y0 - x0x1 - y0y1);
+
+    line->e2.x = k * y_diff_b;
+    line->e2.y = k * x_diff_a;
+    line->e2.z = 1.0f + k * (x1y0 - x0y1);
+
+    line->e3.x = k * x_diff_a;
+    line->e3.y = k * y_diff_a;
+    line->e3.z = 1.0f + k * (x1x1 + y1y1 - x0x1 - y0y1);
+}
+
+__global__
+void
+draw_line(unsigned char* const image,
+          const line* const    line,
+          const int            stream,
+          const int            width,
+          const int            height)
+{
+    const int index = stream * image_chunk_size * image_chunk_size +
+                      blockIdx.x * image_chunk_size +
+                      threadIdx.x;
+
+    const int y = index / width;
+    const int x = index - y * width;
+
+    if (x < width && y < height)
     {
-        unsigned char* pixel = image + 4 * (y * width + x);
+        const float sx = (float)x / width;
+        const float sy = (float)y / height;
 
-        const float alpha = tex1D(gaussian_lut, d0 < d2 ? d0 : d2) *
-                            tex1D(gaussian_lut, d1 < d3 ? d1 : d3);
+        const float d0 = sx * line->e0.x + sy * line->e0.y + line->e0.z;
+        const float d1 = sx * line->e1.x + sy * line->e1.y + line->e1.z;
+        const float d2 = sx * line->e2.x + sy * line->e2.y + line->e2.z;
+        const float d3 = sx * line->e3.x + sy * line->e3.y + line->e3.z;
 
-        const float b_r = pixel[0] / 255.0f;
-        const float b_g = pixel[1] / 255.0f;
-        const float b_b = pixel[2] / 255.0f;
-        const float b_a = pixel[3] / 255.0f;
+        if (d0 >= 0.0f && d1 >= 0.0f && d2 >= 0.0f && d3 >= 0.0f)
+        {
+            unsigned char* pixel = image + 4 * (y * width + x);
 
-        const float inverse_alpha = 1.0f - alpha;
+            const float alpha = tex1D(gaussian_lut, d0 < d2 ? d0 : d2) *
+                                tex1D(gaussian_lut, d1 < d3 ? d1 : d3);
 
-        const float r = info->color.r * alpha + b_r * inverse_alpha;
-        const float g = info->color.g * alpha + b_g * inverse_alpha;
-        const float b = info->color.b * alpha + b_b * inverse_alpha;
-        const float a = alpha + b_a * inverse_alpha;
+            const float b_r = pixel[0] / 255.0f;
+            const float b_g = pixel[1] / 255.0f;
+            const float b_b = pixel[2] / 255.0f;
+            const float b_a = pixel[3] / 255.0f;
 
-        pixel[0] = static_cast<unsigned char>(255.0f * r);
-        pixel[1] = static_cast<unsigned char>(255.0f * g),
-        pixel[2] = static_cast<unsigned char>(255.0f * b);
-        pixel[3] = static_cast<unsigned char>(255.0f * a);
+            const float inverse_alpha = 1.0f - alpha;
+
+            const float r = line->color.r * alpha + b_r * inverse_alpha;
+            const float g = line->color.g * alpha + b_g * inverse_alpha;
+            const float b = line->color.b * alpha + b_b * inverse_alpha;
+            const float a = alpha + b_a * inverse_alpha;
+
+            pixel[0] = static_cast<unsigned char>(255.0f * r);
+            pixel[1] = static_cast<unsigned char>(255.0f * g),
+            pixel[2] = static_cast<unsigned char>(255.0f * b);
+            pixel[3] = static_cast<unsigned char>(255.0f * a);
+        }
     }
 }
 
@@ -349,7 +386,6 @@ int
 main(const int argc, const char* argv[])
 {
     geometry g("floyd.txt");
-    std::vector<line_draw_info> lines(g.lines.size());
 
     const std::size_t image_total_bytes = g.height * g.width * 4;
 
@@ -357,6 +393,7 @@ main(const int argc, const char* argv[])
 
     std::vector<unsigned char> image(image_total_bytes);
 
+    // Initialize image alpha values
     for (int i = 3; i < image_total_bytes; i += 4)
     {
         image[i] = 255;
@@ -370,83 +407,49 @@ main(const int argc, const char* argv[])
               image_total_bytes, cudaMemcpyHostToDevice);
 
     void* device_lines;
-    cuda_call(cudaMalloc, &device_lines, lines.size() * sizeof(line_draw_info));
-
-    int i = 0;
-    for (std::vector<line>::iterator line = g.lines.begin();
-         line != g.lines.end();
-         ++line, ++i)
-    {
-        line_draw_info& info = lines[i];
-
-        const float r        = line->thickness / 10.0f;
-        const float x_diff_a = line->x0 - line->x1;
-        const float x_diff_b = line->x1 - line->x0;
-        const float y_diff_a = line->y0 - line->y1;
-        const float y_diff_b = line->y1 - line->y0;
-
-        const float length = std::sqrt(std::abs(x_diff_a * x_diff_a - y_diff_a * y_diff_a));
-        
-        const float k = 2.0f / ((2.0f * r + line->thickness) * length);
-
-        info.color = line->color;
-
-        info.e0 = vec3(k * (line->y0 - line->y1),
-                       k * (line->x1 - line->x0),
-                       1 + k * (line->x0 * line->y1 - line->x1 * line->y0));
-
-        info.e1 = vec3(k * (line->x1 - line->x0),
-                       k * (line->y1 - line->y0),
-                       1 + k * (line->x0 * line->x0 +
-                                line->y0 * line->y0 -
-                                line->x0 * line->x1 -
-                                line->y0 * line->y1));
-
-        info.e2 = vec3(k * (line->y1 - line->y0),
-                       k * (line->x0 - line->x1),
-                       1 + k * (line->x1 * line->y0 - line->x0 * line->y1));
-
-        info.e3 = vec3(k * (line->x0 - line->x1),
-                       k * (line->y0 - line->y1),
-                       1 + k * (line->x1 * line->x1 +
-                                line->y1 * line->y1 -
-                                line->x0 * line->x1 -
-                                line->y0 * line->y1));
-    }
-
-    //for (int x = 0; x != width; ++x)
-    //{
-    //    for (int y = 0; y != height; ++y)
-    //    {
-    //        unsigned char* pixel = &image.front() + 4 * (y * width + x);
-    //        pixel[0] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[0] / pixel[3]));
-    //        pixel[1] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[1] / pixel[3]));
-    //        pixel[2] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[2] / pixel[3]));
-    //        pixel[3] = static_cast<unsigned char>(std::min(255.0f, 255.0f * (float)pixel[3] / pixel[3]));
-    //    }
-    //}
+    cuda_call(cudaMalloc, &device_lines, g.lines.size() * sizeof(line));
 
     cuda_call(cudaMemcpy,
-              device_lines, &lines.front(),
-              lines.size() * sizeof(line_draw_info), cudaMemcpyHostToDevice);
+              device_lines, &g.lines.front(),
+              g.lines.size() * sizeof(line), cudaMemcpyHostToDevice);
+    
+    cuda_launch(calculate_line_equations, 1, g.lines.size(), (line*)device_lines);
+    
+    const std::size_t number_of_streams =
+        (g.width * g.height + image_chunk_size * image_chunk_size - 1) /
+        (image_chunk_size * image_chunk_size);
 
-    for (int i = 0; i != lines.size(); ++i)
+    std::vector<cudaStream_t> streams(number_of_streams);
+
+    for (int s = 0; s != number_of_streams; ++s)
     {
-        dim3 gridSize(12, 12);
-        dim3 blockSize(25,25);
+        cuda_call(cudaStreamCreate, &streams[s]);
+    }
 
-        cuda_launch(woot, gridSize, blockSize,
-            (unsigned char*)device_image_area,
-            (const line_draw_info*)device_lines,
-            i,
-            g.width, g.height);
-
-        cuda_call(cudaDeviceSynchronize);
+    for (int l = 0; l != g.lines.size(); ++l)
+    {
+        for (int s = 0; s != number_of_streams; ++s)
+        {
+            cuda_launch_stream(draw_line,
+                               image_chunk_size,
+                               image_chunk_size,
+                               streams[s],
+                               (unsigned char*)device_image_area,
+                               (const line*)device_lines + l,
+                               s,
+                               g.width,
+                               g.height);
+        }
     }
 
     cuda_call(cudaMemcpy,
               &image.front(), device_image_area,
               image_total_bytes, cudaMemcpyDeviceToHost);
+
+    for (int s = 0; s != number_of_streams; ++s)
+    {
+        cuda_call(cudaStreamDestroy, streams[s]);
+    }
 
     cuda_call(cudaFree, device_lines);
     cuda_call(cudaFree, device_image_area);
