@@ -1,0 +1,51 @@
+\input{../../templates/assignment.tex}
+
+\title{	
+\normalfont \normalsize 
+\textsc{Norwegian University of Science and Technology\\TDT4200 -- Parallel Computing} \\ [25pt]
+\horrule{0.5pt} \\[0.4cm]
+\huge Problem Set 3:\\ Debugging \& Optimization\\
+\horrule{2pt} \\[0.5cm]
+}
+
+\author{Per Magnus Veierland\\permve@stud.ntnu.no}
+
+\setlist[enumerate,1]{label=\emph{\alph*})}
+\setlist[enumerate,2]{label=\roman*)}
+\setlist[enumerate,3]{label=\arabic*)}
+
+\date{\normalsize\today}
+
+\begin{document}
+\maketitle
+
+\section*{Part 2: Code}
+
+\subsection*{Problem 1: Debugging}
+
+\begin{enumerate}
+
+\item The program \texttt{test01.c} has the following bugs:
+
+\begin{enumerate}[label=Bug \#\arabic*)]
+\item
+The dynamic memory allocated at \texttt{test01.c:6} is never freed.
+\item
+The dynamic memory allocated at \texttt{test01.c:6} is never used.
+\end{enumerate}
+
+\item The program \texttt{test02.c} has the following problems:
+
+\begin{enumerate}[label=Problem \#\arabic*)]
+\item
+The dynamic memory allocated at \texttt{test02.c:6} is never freed.
+\item
+The array accesses seem a bit illogical, although it is hard to know the exact indented behavior. Currently array indexes 0-31 are initialized with the values 0-31, and the contents of array indexes 64-95 is copied from array indexes 0-31. This leaves array indexes 32-63 and 96-127 uninitialized.
+
+The more logical behavior would likely be for each loop to iterate from $i=0$ to $i<64$ which would result in array indexes 0-63 and 64-127 both to be set to the values with in the range 0-63.
+\end{enumerate}
+
+\end{enumerate}
+
+\end{document}
+
