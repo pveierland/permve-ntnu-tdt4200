@@ -1,0 +1,16 @@
+time 2015-09-19
+real    0m46.260s
+user    0m45.428s
+sys     0m0.405s
+
+time 2015-09-19
+moving color selection outside loop
+real    0m33.774s
+user    0m33.033s
+sys     0m0.358s
+
+going float
+real    0m29.314s
+user    0m28.700s
+sys     0m0.339s
+

@@ -27,7 +27,7 @@
 
 \item The program \texttt{test01.c} has the following bugs:
 
-\begin{enumerate}[label=Bug \#\arabic*)]
+\begin{enumerate}[label=Bug \#\arabic*:]
 \item
 The dynamic memory allocated at \texttt{test01.c:6} is never freed.
 \item
@@ -36,13 +36,62 @@ The dynamic memory allocated at \texttt{test01.c:6} is never used.
 
 \item The program \texttt{test02.c} has the following problems:
 
-\begin{enumerate}[label=Problem \#\arabic*)]
+\begin{enumerate}[label=Problem \#\arabic*:]
 \item
 The dynamic memory allocated at \texttt{test02.c:6} is never freed.
 \item
-The array accesses seem a bit illogical, although it is hard to know the exact indented behavior. Currently array indexes 0-31 are initialized with the values 0-31, and the contents of array indexes 64-95 is copied from array indexes 0-31. This leaves array indexes 32-63 and 96-127 uninitialized.
+The array accesses seem illogical, although it is hard to know the exact indented behavior. Currently array indexes 0-31 are initialized with the values 0-31, and the contents of array indexes 64-95 is copied from array indexes 0-31. This leaves array indexes 32-63 and 96-127 uninitialized.
 
 The more logical behavior would likely be for each loop to iterate from $i=0$ to $i<64$ which would result in array indexes 0-63 and 64-127 both to be set to the values with in the range 0-63.
+\end{enumerate}
+
+\item The program \texttt{reverseParams.c} has the following problems:
+
+\begin{enumerate}[label=Problem \#\arabic*:]
+\item
+The return value from a \texttt{malloc} memory allocation on line 11 is not checked for failure.
+
+\item
+A char \texttt{char*} should be used to handle the character array instead of an \texttt{unsigned char*} (line 11). The \texttt{char} is a type distinct from both \texttt{signed char} and \texttt{unsigned char}, and may be either signed or unsigned depending on the platform. This currently causes a \texttt{strcpy} usage warning.
+
+\item
+A \texttt{strcpy} is performed without checking the size of the source string versus the size of the destination memory area. This can lead to memory writes outside the allocated area which is undefined behavior.
+
+\item
+The search for the first non-null character on line 16 accesses offset 10 of the \texttt{mem} array. This is outside the allocated memory area and is undefined behavior.
+
+\item
+Beyond the previous bug, the search for the first non-null character on line 16 may start at a position in the \texttt{mem} array which is after the length of the input string. There could be several uninitialized characters before reaching the actual null character leading to incorrect behavior.
+
+\item
+The search for \texttt{lastChar} can fail when the input string is just a null character, and the rest of the memory area allocated with \texttt{malloc} happens to have zero values. When this occurs, the \texttt{lastChar} variable will be uninitialized. This can lead to incorrect and undefined behavior later in the program.
+
+\item
+The premise for the conversion between lower and upper case is wrong. There is no guaranteed ordering of characters in the language. Only the ordering of the decimal digits 0-9 are guaranteed.
+
+\item
+Even if the technique used for conversion between cases is assumed to be valid, line 31 and 35 lacks upper bound checks leading to wrong values for certain non-alphabetic characters.
+
+\item
+Line 54: Programs can be legally run via \texttt{exec} with no input. This will fail badly when iterating from 0 and downwards.
+
+\end{enumerate}
+
+\begin{enumerate}[label=Optional \#\arabic*:]
+\item
+
+\scalebox{0.6}
+{
+\begin{tabular}{*{30}{|c}|}
+\hline
+0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 14 & 15 & 16 & 17 & 18 & 19 & 20 & 21 & 22 & 23 & 24 & 25 & 26 & 27 & 28\\
+\hline
+\texttt{.} & \texttt{/} & \texttt{a} & \texttt{.} & \texttt{o} & \texttt{u} & \texttt{t} & \texttt{\textbackslash0} & \texttt{\textbackslash0} & \texttt{1} & \texttt{2} & \texttt{3} & \texttt{4} & \texttt{5} & \texttt{6} & \texttt{7} & \texttt{\textbackslash0} & \texttt{q} & \texttt{w} & \texttt{e} & \texttt{r} & \texttt{t} & \texttt{y} & \texttt{u} & \texttt{i} & \texttt{o} & \texttt{p} & \texttt{a} & \texttt{\textbackslash0} \\
+\hline
+\end{tabular} \\
+
+}
+
 \end{enumerate}
 
 \end{enumerate}

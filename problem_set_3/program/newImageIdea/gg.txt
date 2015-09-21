@@ -1,0 +1,154 @@
+
+
+
+
+            if (x == half)
+            {
+                ++ul, ++ll;
+                break;
+            }
+        calculate output
+        ++lr, ++ur, ++ll, ++ul;
+
+
+
+
+
+        // DO FIRST ROW
+        output[0] = input[width + 1] / 4.0f;
+        output[1] = input[width + 2] / 6.0f;
+
+        for (int x = 2; x != width - 1; ++x)
+        {
+            output[x] = (input[width + x + 1] - input[width + x - 2]) / 6.0f;
+        }
+
+        output[width - 1] = (input[2 * width - 1] - input[2 * width - 3]) / 4.0f;
+
+        // DO SECOND ROW
+
+        output[width] = input[width * 2 + 1] / 6.0f;
+        output[width + 1] = input[width * 2 + 2] / 9.0f;
+
+        for (int x = 2; x != width - 1; ++x)
+        {
+            output[width + x] = (input[width * 2 + x + 1] - input[width * 2 + x - 2]) / 9.0f;
+        }
+
+        output[width * 2 - 1] = (input[2 * width - 1] - input[2 * width - 3]) / 6.0f;
+
+        // DO MIDDLE ROWZ
+
+        for (int y = 2; y != height - 1; ++y)
+        {
+            output[width * y] = (input[width * (y + 1) + 1] - input[width * (y - 2) + 1]) / 6;
+            output[width * y + 1] =
+                (input[width * (y + 1) + 2] - input[width * (y - 2) + 2]) / 9;
+
+            for (int x = 2; x != width - 1; ++x)
+            {
+                output[width * y + x] = (
+                    + input[width * (y + 1) + x + 1]
+                    - input[width * (y + 1) + x - 2]
+                    - input[width * (y - 2) + x + 1]
+                    + input[width * (y - 2) + x - 2]
+                    ) / 9.0f;
+            }
+
+            output[width * (y + 1) - 1] = (
+                    + input[width * (y + 2) - 1]
+                    - input[width * (y - 1) - 1]
+                    - input[width * (y + 2) - 3]
+                    + input[width * (y - 1) - 3]) / 6;
+        }
+
+        // DO LAST ROW
+        output[width * (height - 1)] = (input[width * (height - 1) + 1] - input[width * (height - 3) + 1]) / 4.0f;
+        output[width * (height - 1) + 1] = (input[width * (height - 1) + 2] - input[width * (height - 3) + 2]) / 6.0f;
+
+        for (int x = 2; x != width - 1; ++x)
+        {
+            output[width * (height - 1) + x] = (
+                    + input[width * (height - 1) + x + 1]
+                    - input[width * (height - 1) + x - 2]
+                    - input[width * (height - 3) + x + 1]
+                    + input[width * (height - 3) + x - 2]) / 6.0f;
+        }
+
+        output[width * height - 1] = (
+                + input[width * height - 1]
+                - input[width * height - 3]
+                - input[width * (height - 1) - 1]
+                + input[width * (height - 1) - 3]) / 4.0f;
+
+        return;
+
+
+        // do corner pixel
+        // do last line
+        // do corner pixel
+        for (int y = 0; y != height; ++y)
+        {
+            for (int x = 0; x != width; ++x)
+            {
+                int x1 = std::min(x - 1, width) - 1;
+                int x2 = std::min(x + 2, width) - 1;
+                int y1 = std::min(y - 1, height) - 1;
+                int y2 = std::min(y + 2, height) - 1;
+
+                float a{}, b{}, c{}, d{};
+
+                if (y1 >= 0 && x1 >= 0) a = input[width * y1 + x1];
+                if (y1 >= 0 && x2 >= 0) b = input[width * y1 + x2];
+                if (y2 >= 0 && x1 >= 0) c = input[width * y2 + x1];
+                if (y2 >= 0 && x2 >= 0) d = input[width * y2 + x2];
+
+                int n = (x2 - std::max(0, x1) + 1) * (y2 - std::max(0, y1) + 1);
+                output[y * width + x] = (a - b - c + d) / n;
+            }
+        }
+    //    ValueType *ul = input + 0;
+    //    ValueType *ur = input + 1;
+    //    ValueType *ll = input + width + 0;
+    //    ValueType *lr = input + width + 1;
+
+    //    int N = 4;
+
+    //    int x = 0, y = 0;
+
+    //    loop
+    //    {
+    //        do
+    //        {
+    //            *output++ = sum(ul, ur, ll, lr) / N;
+    //            N += 2;
+    //            ++lr; ++ur;
+    //        }
+    //        while (++x < 1);
+
+    //        do
+    //        {
+    //            *output++ = sum(ul, ur, ll, lr) / N;
+    //            ++ul; ++ur; ++ll; ++lr;
+    //        }
+    //        while (x++ < width - 2);
+
+    //        while (true)
+    //        {
+    //            ++ul; ++ll;
+
+
+    //            ++lr;
+    //            ++
+    //            if (x == width - 1)
+    //            {
+    //                break;
+    //            }
+    //            else
+    //            {
+    //                ++i;
+    //            }
+    //        }
+
+
+    //    }
