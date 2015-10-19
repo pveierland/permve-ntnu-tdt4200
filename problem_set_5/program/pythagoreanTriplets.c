@@ -126,6 +126,10 @@ main(const int argc, char** const argv)
 
         int number_of_pythagorean_triplets = 0;
 
+        #ifdef HAVE_OPENMP
+        #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
+                                 schedule(dynamic)
+        #endif
         for (int n = 1; n < input_sets[i].stop; ++n)
         {
             const int nn = n * n;
@@ -133,7 +137,6 @@ main(const int argc, char** const argv)
             // m is incremented by 2 for each iteration such
             // that (m - n) is always odd.
 
-            #pragma omp parallel for reduction(+: number_of_pythagorean_triplets)
             for (int m = n + 1; m < input_sets[i].stop; m += 2)
             {
                 if (gcd(m, n) == 1)
