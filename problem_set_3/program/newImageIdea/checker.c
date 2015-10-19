@@ -33,6 +33,14 @@ int testImage(PPMImage *compare, PPMImage *correct) {
 	
 	int multiErrors = requiredCorrect - (correctPixels + singleErrors);
 	printf("Pixles, multiple errors: %d\n", multiErrors);
+
+    
+    for (int i = 0; i < 1024; i++)
+    {
+        printf("%d ", counDiffA[i]);
+    }
+    printf("\n");
+
 	return 0;
 }
 
