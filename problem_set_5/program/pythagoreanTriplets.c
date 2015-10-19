@@ -11,26 +11,88 @@
 //#include <omp.h>
 //#endif
 
-#if defined(_OPENMP)
-#include <omp.h>
-#endif
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
 
-int
-gcd(int a, int b)
+//unsigned int
+//gcd(unsigned int a, unsigned int b)
+//{
+//    unsigned int x;
+//    while (b)
+//    {
+//        x = a % b;
+//        a = b;
+//        b = x;
+//    }
+//    return a;
+//}
+
+/*
+ *  * The binary gcd algorithm using iteration.
+ *   * Should be fairly fast.
+ *    *
+ *     * Put in the public domain by the author:
+ *      *
+ *       * Christian Stigen Larsen
+ *        * http://csl.sublevel3.org
+ *         */
+//int gcd(int u, int v)
+//{
+//    int shl = 0;
+//
+//    while ( u && v && u!=v ) {
+//        int eu = !(u & 1);
+//        int ev = !(v & 1);
+//
+//        if ( eu && ev ) {
+//            ++shl;
+//            u >>= 1;
+//            v >>= 1;
+//        }
+//        else if ( eu && !ev ) u >>= 1;
+//        else if ( !eu && ev ) v >>= 1;
+//        else if ( u>=v ) u = (u-v)>>1;
+//        else {
+//            int tmp = u;
+//            u = (v-u)>>1;
+//            v = tmp;
+//        }
+//    }
+//
+//    return !u? v<<shl : u<<shl;
+//}
+
+int gcd(int u,int v)
 {
-    int x;
-    while (b)
+    int k=0,t=0,i;
+    while (!(u&1) && !(v&1))
     {
-        x = a % b;
-        a = b;
-        b = x;
+    k++;
+    u>>=1;
+    v>>=1;
     }
-    return a;
+    if (u&1)
+    t=u;
+    else
+    t=-v;
+    do
+    {
+    while (!(t&1))
+    t>>=1;
+    if (t>0)
+    u=t;
+    else
+    v=-t;
+    t=u-v;
+    }while (t);
+    for (i=0;i<k;i++)
+    u<<=1;
+    return(u);
 }
 
 typedef struct
 {
-    int start, stop, number_of_threads;
+    int start, stop, number_of_threads, result;
 } input_set;
 
 input_set
@@ -41,21 +103,28 @@ read_input_set()
     char* line_string = NULL;
     size_t line_length;
 
-    if (getline(&line_string, &line_length, stdin) == -1)
+    if ((getline(&line_string, &line_length, stdin) == -1) ||
+        (sscanf(line_string,
+                "%d %d %d",
+                &value.start,
+                &value.stop,
+                &value.number_of_threads) < 2))
     {
-        fprintf(stderr, "read_input_set(): getline() failure\n");
-        exit(EXIT_FAILURE);
+        value.start             = 0;
+        value.stop              = 0;
+        value.number_of_threads = 1;
     }
 
-    if (sscanf(line_string,
-               "%d %d %d",
-               &value.start,
-               &value.stop,
-               &value.number_of_threads) < 2)
+    // Sanitize input values
+    if ((value.start < 0) ||
+        (value.stop  < 0) ||
+        (value.stop < value.start))
     {
-        fprintf(stderr, "read_input_set(): sscanf() failure\n");
-        exit(EXIT_FAILURE);
+        value.start = 0;
+        value.stop  = 0;
     }
+
+    value.number_of_threads = max(value.number_of_threads, 1);
 
     free(line_string);
 
@@ -70,16 +139,10 @@ read_integer()
     char* line_string = NULL;
     size_t line_length;
 
-	if (getline(&line_string, &line_length, stdin) == -1)
+	if ((getline(&line_string, &line_length, stdin) == -1) ||
+        (sscanf(line_string, "%d", &value) != 1))
     {
-        fprintf(stderr, "read_integer(): getline() failure\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (sscanf(line_string, "%d", &value) != 1)
-    {
-        fprintf(stderr, "read_integer(): sscanf() failure\n");
-        exit(EXIT_FAILURE);
+        value = 0;
     }
 
     free(line_string);
@@ -90,69 +153,89 @@ read_integer()
 int
 main(const int argc, char** const argv)
 {
-//#if defined(_OPENMP)
-//#pragma omp parallel
-//    {
-//
-//    int NCPU,tid,NPR,NTHR;
-//    /* get the total number of CPUs/cores available for OpenMP */
-//    NCPU = omp_get_num_procs();
-//    /* get the current thread ID in the parallel region */
-//    tid = omp_get_thread_num();
-//    /* get the total number of threads available in this parallel region */
-//    NPR = omp_get_num_threads();
-//    /* get the total number of threads requested */
-//    NTHR = omp_get_max_threads();
-//    /* only execute this on the master thread! */
-//    if (tid == 0) {
-//        printf("%i : NCPU\t= %i\n",tid,NCPU);
-//        printf("%i : NTHR\t= %i\n",tid,NTHR);
-//        printf("%i : NPR\t= %i\n",tid,NPR);
-//    }
-//    printf("%i : hello multicore user! I am thread %i out of %i\n",tid,tid,NPR);
-//    }
-//
-//    return 0;
-//#endif
-
-
     const int number_of_input_sets = read_integer();
 
-    input_set input_sets[number_of_input_sets];
+    int* gcd_lookup = malloc(sizeof(int) * 200 * 200);
 
-    for (int i = 0; i != number_of_input_sets; ++i)
+    for (int n = 1; n < 200; ++n)
     {
-        input_sets[i] = read_input_set();
-
-        int number_of_pythagorean_triplets = 0;
-
-        #ifdef HAVE_OPENMP
-        #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
-                                 schedule(dynamic)
-        #endif
-        for (int n = 1; n < input_sets[i].stop; ++n)
+        for (int m = n + 1; m < 200; m += 2)
         {
-            const int nn = n * n;
+            gcd_lookup[m * 200 + n] = gcd(m, n);
+        }
+    }
 
-            // m is incremented by 2 for each iteration such
-            // that (m - n) is always odd.
+    if (number_of_input_sets > 0)
+    {
+        input_set input_sets[number_of_input_sets];
 
-            for (int m = n + 1; m < input_sets[i].stop; m += 2)
+        for (int i = 0; i < number_of_input_sets; ++i)
+        {
+            input_sets[i] = read_input_set();
+        }
+
+        for (int i = 0; i < number_of_input_sets; ++i)
+        {
+            int number_of_pythagorean_triplets = 0;
+
+            const int upper_boundary = (int)ceil(sqrt(input_sets[i].stop));
+
+//            #pragma omp parallel for reduction(+: number_of_pythagorean_triplets)
+//                                     num_threads(input_sets[i].number_of_threads)
+//                                     schedule(static)
+            for (int n = 1; n < upper_boundary; ++n)
             {
-                if (gcd(m, n) == 1)
-                {
-                    const int mm = m * m;
-                    const int c  = mm + nn;
+                const int nn = n * n;
 
-                    if (c >= input_sets[i].start && c < input_sets[i].stop)
+                // m is incremented by 2 for each iteration such
+                // that (m - n) is always odd.
+
+                int lower_boundary = n + 1;
+
+                if (nn < input_sets[i].start)
+                {
+                    int wtf = (int)floor(sqrt(input_sets[i].start - nn));
+                    wtf += (int)!((wtf - n) & 1);
+                    if (wtf > lower_boundary)
                     {
-                        number_of_pythagorean_triplets++;
+                        lower_boundary = wtf;
+                    }
+                }
+
+                for (int m = lower_boundary; m < upper_boundary; m += 2)
+                {
+                    int g = gcd_lookup[m * 200 + n];
+                    //if (gcd(m, n) == 1)
+                    if (g == 1)
+                    {
+                        const int mm = m * m;
+                        const int c = mm + nn;
+
+                        ///if (c >= input_sets[i].stop)
+                        ///{
+                        ///    break;
+                        ///}
+
+                        ///if (c >= input_sets[i].start)
+                        ///{
+                        ///    number_of_pythagorean_triplets++;
+                        ///}
+
+                        if (c >= input_sets[i].start && c < input_sets[i].stop)
+                        {
+                            number_of_pythagorean_triplets++;
+                        }
                     }
                 }
             }
+
+            input_sets[i].result = number_of_pythagorean_triplets;
         }
 
-        printf("%d\n", number_of_pythagorean_triplets);
+        for (int i = 0; i < number_of_input_sets; ++i)
+        {
+            printf("%d\n", input_sets[i].result);
+        }
     }
 
     return EXIT_SUCCESS;
