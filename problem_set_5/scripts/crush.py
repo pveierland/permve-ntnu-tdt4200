@@ -15,7 +15,7 @@ class colors:
     UNDERLINE = '\033[4m'
 
 def run_program(program, inputs):
-    proc   = subprocess.Popen([program], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    proc   = subprocess.Popen([program], stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
     result = proc.communicate(
         '{0}\n{1}'.format(
             len(inputs),
