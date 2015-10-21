@@ -2,14 +2,38 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef HAVE_MPI
 #include <mpi.h>
-#endif
+
+#define mpi_call(f, ...) \
+    mpi_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
+
+void
+mpi_error(const int error, const char* file, const int line, const char* function)
+{
+    char message[MPI_MAX_ERROR_STRING] = {};
+    int  message_length = 0;
+    MPI_Error_string(error, message, &message_length);
+    fprintf(stderr, "%s:%d -> %s failed: %s\n", file, line, function, message);
+    exit(error);
+}
+
+static inline
+void
+mpi_assert(const int error, const char* file, const int line, const char* function)
+{
+    if (error != MPI_SUCCESS)
+    {
+        mpi_error(error, file, line, function);
+    }
+}
+#endif // ifdef HAVE_MPI
 
 #ifdef HAVE_OPENMP
 #include <omp.h>
-#endif
+#endif // ifdef HAVE_OPENMP
 
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
@@ -52,7 +76,7 @@ gcd(unsigned int a, unsigned int b)
 
 typedef struct
 {
-    int start, stop, number_of_threads, result;
+    int start, stop, number_of_threads;
 } input_set;
 
 input_set
@@ -110,34 +134,19 @@ read_integer()
     return value;
 }
 
-#define mpi_call(f, ...) \
-    mpi_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
-
-void
-mpi_error(const int error, const char* file, const int line, const char* function)
-{
-    char message[MPI_MAX_ERROR_STRING] = {};
-    int  message_length = 0;
-    MPI_Error_string(error, message, &message_length);
-    fprintf(stderr, "%s:%d -> %s failed: %s\n", file, line, function, message);
-    exit(error);
-}
-
-inline
-void
-mpi_assert(const int error, const char* file, const int line, const char* function)
-{
-    if (error != MPI_SUCCESS)
-    {
-        mpi_error(error, file, line, function);
-    }
-}
-
 int
 main(const int argc, char** const argv)
 {
     #ifdef HAVE_MPI
     mpi_call(MPI_Init, NULL, NULL);
+    #endif
+
+    int world_rank = 0;
+    int world_size = 1;
+
+    #ifdef HAVE_MPI
+    mpi_call(MPI_Comm_rank, MPI_COMM_WORLD, &world_rank);
+    mpi_call(MPI_Comm_size, MPI_COMM_WORLD, &world_size);
     #endif
 
     const int number_of_input_sets = read_integer();
@@ -151,20 +160,23 @@ main(const int argc, char** const argv)
             input_sets[i] = read_input_set();
         }
 
+        int results[number_of_input_sets];
+        memset(results, 0, sizeof(int) * number_of_input_sets);
+
         for (int i = 0; i < number_of_input_sets; ++i)
         {
             const int start = input_sets[i].start;
             const int stop  = input_sets[i].stop;
 
-            int number_of_pythagorean_triplets = 0;
-
             const int upper_n_boundary = calculate_upper_n_boundary(stop);
+
+            int number_of_pythagorean_triplets = 0;
 
             #ifdef HAVE_OPENMP
             #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
                                      num_threads(input_sets[i].number_of_threads)
             #endif
-            for (int n = 1; n < upper_n_boundary; ++n)
+            for (int n = 1 + world_rank; n < upper_n_boundary; n += world_size)
             {
                 const int nn               = n * n;
                 const int lower_m_boundary = calculate_lower_m_boundary(start, n, nn);
@@ -175,24 +187,26 @@ main(const int argc, char** const argv)
 
                 for (int m = lower_m_boundary; m < upper_m_boundary; m += 2)
                 {
-                    if (gcd(m, n) == 1)
-                    {
-                        number_of_pythagorean_triplets++;
-                    }
+                    number_of_pythagorean_triplets += (int)(gcd(m, n) == 1);
                 }
             }
 
-            input_sets[i].result = number_of_pythagorean_triplets;
+            results[i] = number_of_pythagorean_triplets;
         }
 
+        #ifdef HAVE_MPI
+        mpi_call(MPI_Reduce,
+                 world_rank ? results : MPI_IN_PLACE,
+                 results, number_of_input_sets,
+                 MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+        #endif
 
-    #ifdef HAVE_MPI
-    mpi_call(MPI_Init, NULL, NULL);
-    #endif
-
-        for (int i = 0; i < number_of_input_sets; ++i)
+        if (world_rank == 0)
         {
-            printf("%d\n", input_sets[i].result);
+            for (int i = 0; i < number_of_input_sets; ++i)
+            {
+                printf("%d\n", results[i]);
+            }
         }
     }
 
