@@ -15,6 +15,25 @@
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 
+#define checked_malloc(size) assert_malloc(size, __FILE__, __LINE__)
+
+void*
+assert_malloc(const size_t size, const char* const file, const int line)
+{
+    void* v = malloc(size);
+    if (!v)
+    {
+        fprintf(stderr, "%s:%d malloc(%zu) failed!", file, line, size);
+
+        #ifdef HAVE_MPI
+        MPI_Abort(MPI_COMM_WORLD, -1);
+        #else
+        exit(-1);
+        #endif
+    }
+    return v;
+}
+
 static inline
 int
 calculate_lower_m_boundary(const int start, const int n, const int nn)
@@ -59,7 +78,7 @@ typedef struct
 input_set
 read_input_set()
 {
-    input_set value = {};
+    input_set value = {0};
 
     char* line_string = NULL;
     size_t line_length;
@@ -119,6 +138,8 @@ read_integer()
 int
 main(const int argc, char** const argv)
 {
+    (void)argc; (void)argv;
+
     #ifdef HAVE_MPI
     MPI_Init(NULL, NULL);
     #endif
@@ -142,7 +163,7 @@ main(const int argc, char** const argv)
     MPI_Bcast(&number_of_input_sets, 1, MPI_INT, 0, MPI_COMM_WORLD);
     #endif
 
-    input_set input_sets[number_of_input_sets];
+    input_set* const input_sets = checked_malloc(number_of_input_sets * sizeof(input_set));
 
     if (world_rank == 0)
     {
@@ -160,7 +181,7 @@ main(const int argc, char** const argv)
               MPI_COMM_WORLD);
     #endif
 
-    int results[number_of_input_sets];
+    int* const results = checked_malloc(number_of_input_sets * sizeof(int));
 
     for (int i = 0; i < number_of_input_sets; ++i)
     {
@@ -210,6 +231,9 @@ main(const int argc, char** const argv)
     #ifdef HAVE_MPI
     MPI_Finalize();
     #endif
+    
+    free(input_sets);
+    free(results);
 
     return EXIT_SUCCESS;
 }
