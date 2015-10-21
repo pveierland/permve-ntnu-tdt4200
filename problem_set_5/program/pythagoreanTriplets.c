@@ -138,7 +138,9 @@ main(const int argc, char** const argv)
         number_of_input_sets = read_integer();
     }
     
+    #ifdef HAVE_MPI
     MPI_Bcast(&number_of_input_sets, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    #endif
 
     input_set input_sets[number_of_input_sets];
 
@@ -150,11 +152,13 @@ main(const int argc, char** const argv)
         }
     }
 
+    #ifdef HAVE_MPI
     MPI_Bcast(input_sets,
               number_of_input_sets * sizeof(input_set) / sizeof(int),
               MPI_INT,
               0,
               MPI_COMM_WORLD);
+    #endif
 
     int results[number_of_input_sets];
 
