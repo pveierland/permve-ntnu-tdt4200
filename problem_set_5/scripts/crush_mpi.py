@@ -23,37 +23,25 @@ def run_program(program, inputs):
     if not proc.returncode:
         return map(int, result[0].decode('utf-8').splitlines())
 
-def verify_test_set(start, stop, threads, expected):
-    outputs = run_program(sys.argv[1], [ (start, stop) ])
+def verify_test_set(program, inputs, expected):
+    outputs = run_program(program, inputs)
     success = outputs == expected
 
-    print('{0}[{1}] start={2} stop={3} threads={4} expected={5} actual={6}{7}'.format(
+    print('{0}[{1}] {2} inputs={3} expected={4} actual={5}{6}'.format(
         colors.OKGREEN if success else colors.FAIL,
         'OK' if success else 'FAIL',
-        start, stop, threads, expected, outputs, colors.ENDC))
+        program, inputs, expected, outputs, colors.ENDC))
 
     if not success:
         sys.exit(1)
 
-# Valid c values + number of triplets for each c:
-valid_c_values = [
-    (5, 1),
-    (13, 1),
-    (17, 1),
-    (25, 1),
-    (29, 1),
-    (37, 1),
-    (41, 1),
-    (53, 1),
-    (61, 1),
-    (65, 2),
-    (73, 1),
-    (85, 2),
-    (89, 1),
-    (97, 1)
-]
+test_inputs      = [ [ (0, 100), (75, 150), (150, 75) ] ]
+expected_outputs = [ [ 16, 12, 0 ] ]
 
-for start in range(0, 100):
-    for stop in range(0, 100):
-        expected = sum(c[1] for c in valid_c_values if c[0] >= start and c[0] < stop)
-        verify_test_set(start, stop, random.randrange(1, 9), [expected])
+for mpi_nodes in range(1, 11):
+    for openmp_threads in range(1, 11):
+        for test_input, expected_output in zip(test_inputs, expected_outputs):
+            verify_test_set(
+                'mpirun -n {0} {1}'.format(mpi_nodes, sys.argv[1]),
+                list((start, stop, openmp_threads) for start, stop in test_input),
+                expected_output)
