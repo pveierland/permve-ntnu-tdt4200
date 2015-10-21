@@ -53,7 +53,7 @@ valid_c_values = [
     (97, 1)
 ]
 
-for start in range(0, 100):
-    for stop in range(0, 100):
-        expected = sum(c[1] for c in valid_c_values if c[0] >= start and c[0] < stop)
+for start in range(-5, 101):
+    for stop in range(-5, 101):
+        expected = sum(c[1] for c in valid_c_values if c[0] >= start and c[0] < stop) if (start >= 0 and stop >= 0) else 0
         verify_test_set(start, stop, random.randrange(1, 9), [expected])
