@@ -3,10 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//#ifdef HAVE_MPI
-//#include <mpi.h>
-//#endif
-//
+#ifdef HAVE_MPI
+#include <mpi.h>
+#endif
+
 #ifdef HAVE_OPENMP
 #include <omp.h>
 #endif
@@ -110,9 +110,36 @@ read_integer()
     return value;
 }
 
+#define mpi_call(f, ...) \
+    mpi_assert(f(__VA_ARGS__), __FILE__, __LINE__, #f)
+
+void
+mpi_error(const int error, const char* file, const int line, const char* function)
+{
+    char message[MPI_MAX_ERROR_STRING] = {};
+    int  message_length = 0;
+    MPI_Error_string(error, message, &message_length);
+    fprintf(stderr, "%s:%d -> %s failed: %s\n", file, line, function, message);
+    exit(error);
+}
+
+inline
+void
+mpi_assert(const int error, const char* file, const int line, const char* function)
+{
+    if (error != MPI_SUCCESS)
+    {
+        mpi_error(error, file, line, function);
+    }
+}
+
 int
 main(const int argc, char** const argv)
 {
+    #ifdef HAVE_MPI
+    mpi_call(MPI_Init, NULL, NULL);
+    #endif
+
     const int number_of_input_sets = read_integer();
 
     if (number_of_input_sets > 0)
@@ -157,6 +184,11 @@ main(const int argc, char** const argv)
 
             input_sets[i].result = number_of_pythagorean_triplets;
         }
+
+
+    #ifdef HAVE_MPI
+    mpi_call(MPI_Init, NULL, NULL);
+    #endif
 
         for (int i = 0; i < number_of_input_sets; ++i)
         {
