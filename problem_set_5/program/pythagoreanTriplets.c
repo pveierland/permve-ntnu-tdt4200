@@ -7,87 +7,47 @@
 //#include <mpi.h>
 //#endif
 //
-//#ifdef HAVE_OPENMP
-//#include <omp.h>
-//#endif
+#ifdef HAVE_OPENMP
+#include <omp.h>
+#endif
 
 #define min(a,b) (((a)<(b))?(a):(b))
 #define max(a,b) (((a)>(b))?(a):(b))
 
-//unsigned int
-//gcd(unsigned int a, unsigned int b)
-//{
-//    unsigned int x;
-//    while (b)
-//    {
-//        x = a % b;
-//        a = b;
-//        b = x;
-//    }
-//    return a;
-//}
-
-/*
- *  * The binary gcd algorithm using iteration.
- *   * Should be fairly fast.
- *    *
- *     * Put in the public domain by the author:
- *      *
- *       * Christian Stigen Larsen
- *        * http://csl.sublevel3.org
- *         */
-//int gcd(int u, int v)
-//{
-//    int shl = 0;
-//
-//    while ( u && v && u!=v ) {
-//        int eu = !(u & 1);
-//        int ev = !(v & 1);
-//
-//        if ( eu && ev ) {
-//            ++shl;
-//            u >>= 1;
-//            v >>= 1;
-//        }
-//        else if ( eu && !ev ) u >>= 1;
-//        else if ( !eu && ev ) v >>= 1;
-//        else if ( u>=v ) u = (u-v)>>1;
-//        else {
-//            int tmp = u;
-//            u = (v-u)>>1;
-//            v = tmp;
-//        }
-//    }
-//
-//    return !u? v<<shl : u<<shl;
-//}
-
-int gcd(int u,int v)
+static inline
+int
+calculate_lower_m_boundary(const int start, const int n, const int nn)
 {
-    int k=0,t=0,i;
-    while (!(u&1) && !(v&1))
+    int lower_m_boundary = max(n + 1, (int)ceil(sqrt(start - nn)));
+    lower_m_boundary += (int)!((lower_m_boundary - n) & 1);
+    return lower_m_boundary;
+}
+
+static inline
+int
+calculate_upper_m_boundary(const int stop, const int nn)
+{
+    return (int)ceil(sqrt(stop - nn));
+}
+
+static inline
+int
+calculate_upper_n_boundary(const int stop)
+{
+    return (int)ceil((sqrt(2 * stop - 1) - 1.0) / 2.0);
+}
+
+unsigned int
+gcd(unsigned int a, unsigned int b)
+{
+    unsigned int x;
+    while (b)
     {
-    k++;
-    u>>=1;
-    v>>=1;
+        x = a % b;
+        a = b;
+        b = x;
     }
-    if (u&1)
-    t=u;
-    else
-    t=-v;
-    do
-    {
-    while (!(t&1))
-    t>>=1;
-    if (t>0)
-    u=t;
-    else
-    v=-t;
-    t=u-v;
-    }while (t);
-    for (i=0;i<k;i++)
-    u<<=1;
-    return(u);
+    return a;
 }
 
 typedef struct
@@ -110,18 +70,18 @@ read_input_set()
                 &value.stop,
                 &value.number_of_threads) < 2))
     {
-        value.start             = 0;
-        value.stop              = 0;
+        value.start             = 1;
+        value.stop              = 1;
         value.number_of_threads = 1;
     }
 
     // Sanitize input values
     if ((value.start < 0) ||
         (value.stop  < 0) ||
-        (value.stop < value.start))
+        (value.stop  < value.start))
     {
-        value.start = 0;
-        value.stop  = 0;
+        value.start = 1;
+        value.stop  = 1;
     }
 
     value.number_of_threads = max(value.number_of_threads, 1);
@@ -155,16 +115,6 @@ main(const int argc, char** const argv)
 {
     const int number_of_input_sets = read_integer();
 
-    int* gcd_lookup = malloc(sizeof(int) * 200 * 200);
-
-    for (int n = 1; n < 200; ++n)
-    {
-        for (int m = n + 1; m < 200; m += 2)
-        {
-            gcd_lookup[m * 200 + n] = gcd(m, n);
-        }
-    }
-
     if (number_of_input_sets > 0)
     {
         input_set input_sets[number_of_input_sets];
@@ -176,55 +126,31 @@ main(const int argc, char** const argv)
 
         for (int i = 0; i < number_of_input_sets; ++i)
         {
+            const int start = input_sets[i].start;
+            const int stop  = input_sets[i].stop;
+
             int number_of_pythagorean_triplets = 0;
 
-            const int upper_boundary = (int)ceil(sqrt(input_sets[i].stop));
+            const int upper_n_boundary = calculate_upper_n_boundary(stop);
 
-//            #pragma omp parallel for reduction(+: number_of_pythagorean_triplets)
-//                                     num_threads(input_sets[i].number_of_threads)
-//                                     schedule(static)
-            for (int n = 1; n < upper_boundary; ++n)
+            #ifdef HAVE_OPENMP
+            #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
+                                     num_threads(input_sets[i].number_of_threads)
+            #endif
+            for (int n = 1; n < upper_n_boundary; ++n)
             {
-                const int nn = n * n;
+                const int nn               = n * n;
+                const int lower_m_boundary = calculate_lower_m_boundary(start, n, nn);
+                const int upper_m_boundary = calculate_upper_m_boundary(stop, nn);
 
                 // m is incremented by 2 for each iteration such
                 // that (m - n) is always odd.
 
-                int lower_boundary = n + 1;
-
-                if (nn < input_sets[i].start)
+                for (int m = lower_m_boundary; m < upper_m_boundary; m += 2)
                 {
-                    int wtf = (int)floor(sqrt(input_sets[i].start - nn));
-                    wtf += (int)!((wtf - n) & 1);
-                    if (wtf > lower_boundary)
+                    if (gcd(m, n) == 1)
                     {
-                        lower_boundary = wtf;
-                    }
-                }
-
-                for (int m = lower_boundary; m < upper_boundary; m += 2)
-                {
-                    int g = gcd_lookup[m * 200 + n];
-                    //if (gcd(m, n) == 1)
-                    if (g == 1)
-                    {
-                        const int mm = m * m;
-                        const int c = mm + nn;
-
-                        ///if (c >= input_sets[i].stop)
-                        ///{
-                        ///    break;
-                        ///}
-
-                        ///if (c >= input_sets[i].start)
-                        ///{
-                        ///    number_of_pythagorean_triplets++;
-                        ///}
-
-                        if (c >= input_sets[i].start && c < input_sets[i].stop)
-                        {
-                            number_of_pythagorean_triplets++;
-                        }
+                        number_of_pythagorean_triplets++;
                     }
                 }
             }
