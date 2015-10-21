@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import random
 import subprocess
 import sys
 
@@ -22,14 +23,14 @@ def run_program(program, inputs):
     if not proc.returncode:
         return map(int, result[0].decode('utf-8').splitlines())
 
-def verify_test_set(start, stop, expected):
+def verify_test_set(start, stop, threads, expected):
     outputs = run_program(sys.argv[1], [ (start, stop) ])
     success = outputs == [expected]
 
-    print('{0}[{1}] start={2} stop={3} expected={4} actual={5}{6}'.format(
+    print('{0}[{1}] start={2} stop={3} threads={4} expected={5} actual={6}{7}'.format(
         colors.OKGREEN if success else colors.FAIL,
         'OK' if success else 'FAIL',
-        start, stop, expected, outputs, colors.ENDC))
+        start, stop, threads, expected, outputs, colors.ENDC))
 
     if not success:
         sys.exit(1)
@@ -55,4 +56,4 @@ valid_c_values = [
 for start in range(0, 100):
     for stop in range(0, 100):
         expected = sum(c[1] for c in valid_c_values if c[0] >= start and c[0] < stop)
-        verify_test_set(start, stop, expected)
+        verify_test_set(start, stop, random.randrange(1, 9), expected)
