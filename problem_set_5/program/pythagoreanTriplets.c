@@ -205,7 +205,7 @@ main(const int argc, char** const argv)
             // m is incremented by 2 for each iteration such
             // that (m - n) is always odd.
 
-            for (int m = lower_m_boundary + world_rank;
+            for (int m = lower_m_boundary + 2 * world_rank;
                      m < upper_m_boundary;
                      m += 2 * world_size)
             {
