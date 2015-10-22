@@ -194,7 +194,8 @@ main(const int argc, char** const argv)
 
         #ifdef HAVE_OPENMP
         #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
-                                 num_threads(input_sets[i].number_of_threads)
+                                 num_threads(input_sets[i].number_of_threads) \
+                                 schedule(dynamic)
         #endif
         for (int n = 1; n < upper_n_boundary; ++n)
         {
