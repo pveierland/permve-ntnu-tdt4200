@@ -23,7 +23,7 @@ assert_malloc(const size_t size, const char* const file, const int line)
     void* v = malloc(size);
     if (!v)
     {
-        fprintf(stderr, "%s:%d malloc(%zu) failed!", file, line, size);
+        fprintf(stderr, "error: %s:%d malloc(%zu) failed!\n", file, line, size);
 
         #ifdef HAVE_MPI
         MPI_Abort(MPI_COMM_WORLD, -1);
@@ -196,7 +196,7 @@ main(const int argc, char** const argv)
         #pragma omp parallel for reduction(+: number_of_pythagorean_triplets) \
                                  num_threads(input_sets[i].number_of_threads)
         #endif
-        for (int n = 1 + world_rank; n < upper_n_boundary; n += world_size)
+        for (int n = 1; n < upper_n_boundary; ++n)
         {
             const int nn               = n * n;
             const int lower_m_boundary = calculate_lower_m_boundary(start, n, nn);
@@ -205,7 +205,9 @@ main(const int argc, char** const argv)
             // m is incremented by 2 for each iteration such
             // that (m - n) is always odd.
 
-            for (int m = lower_m_boundary; m < upper_m_boundary; m += 2)
+            for (int m = lower_m_boundary + world_rank;
+                     m < upper_m_boundary;
+                     m += 2 * world_size)
             {
                 number_of_pythagorean_triplets += (int)(gcd(m, n) == 1);
             }
