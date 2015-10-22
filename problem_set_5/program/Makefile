@@ -1,3 +1,5 @@
+all: serial omp mpi combined
+
 serial: pythagoreanTriplets.c
 	gcc -std=c99 -Wall -Wextra -pedantic -o serial_program pythagoreanTriplets.c -lm
 
@@ -9,8 +11,6 @@ mpi: pythagoreanTriplets.c
 
 combined: pythagoreanTriplets.c
 	mpicc -std=c99 -Wall -Wextra -pedantic -o combined_program pythagoreanTriplets.c -lm -fopenmp -DHAVE_MPI -DHAVE_OPENMP
-
-all: serial omp mpi combined
 
 clean:
 	rm -f *program
