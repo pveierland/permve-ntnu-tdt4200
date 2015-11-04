@@ -5,10 +5,6 @@
 #include <omp.h>
 #include "ppm.h"
 
-#if MEASURE_TIMINGS
-#include <time.h>
-#endif // MEASURE_TIMINGS
-
 // Image from:
 // http://7-themes.com/6971875-funny-flowers-pictures.html
 typedef struct
@@ -318,45 +314,65 @@ main(int argc, char** argv)
         image = readStreamPPM(stdin);
     }
 
-    AccurateImage* imageUnchanged = convertImageToNewFormat(
-        image); // save the unchanged image from input image
-    AccurateImage* imageBuffer = createEmptyImage(image);
-    AccurateImage* imageSmall = createEmptyImage(image);
-    AccurateImage* imageBig = createEmptyImage(image);
+    AccurateImage* imageUnchanged = convertImageToNewFormat(image);
+    AccurateImage* imageBuffer1   = createEmptyImage(image);
+    AccurateImage* imageBuffer2   = createEmptyImage(image);
+    AccurateImage* imageBuffer3   = createEmptyImage(image);
+    AccurateImage* imageBuffer4   = createEmptyImage(image);
+    AccurateImage* imageTiny      = createEmptyImage(image);
+    AccurateImage* imageSmall     = createEmptyImage(image);
+    AccurateImage* imageMedium    = createEmptyImage(image);
+    AccurateImage* imageBig       = createEmptyImage(image);
 
     PPMImage* imageOut;
-    imageOut = (PPMImage*)malloc(sizeof(PPMImage));
+    imageOut       = (PPMImage*)malloc(sizeof(PPMImage));
     imageOut->data = (PPMPixel*)malloc(image->x * image->y * sizeof(PPMPixel));
 
-    #if MEASURE_TIMINGS
-    struct timespec t1, t2, t3, t4, t5, t6, t7;
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    #endif // MEASURE_TIMINGS
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        {
+            // Process the tiny case:
+            performNewIdeaIteration(imageTiny, imageUnchanged, 2);
+            performNewIdeaIteration(imageBuffer1, imageTiny, 2);
+            performNewIdeaIteration(imageTiny, imageBuffer1, 2);
+            performNewIdeaIteration(imageBuffer1, imageTiny, 2);
+            performNewIdeaIteration(imageTiny, imageBuffer1, 2);
+        }
 
-    // Process the tiny case:
-    performNewIdeaIteration(imageSmall, imageUnchanged, 2);
-    performNewIdeaIteration(imageBuffer, imageSmall, 2);
-    performNewIdeaIteration(imageSmall, imageBuffer, 2);
-    performNewIdeaIteration(imageBuffer, imageSmall, 2);
-    performNewIdeaIteration(imageSmall, imageBuffer, 2);
+        #pragma omp section
+        {
+            // Process the small case:
+            performNewIdeaIteration(imageSmall, imageUnchanged, 3);
+            performNewIdeaIteration(imageBuffer2, imageSmall, 3);
+            performNewIdeaIteration(imageSmall, imageBuffer2, 3);
+            performNewIdeaIteration(imageBuffer2, imageSmall, 3);
+            performNewIdeaIteration(imageSmall, imageBuffer2, 3);
+        }
 
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t2);
-    #endif // MEASURE_TIMINGS
+        #pragma omp section
+        {
+            // Process the medium case:
+            performNewIdeaIteration(imageMedium, imageUnchanged, 5);
+            performNewIdeaIteration(imageBuffer3, imageMedium, 5);
+            performNewIdeaIteration(imageMedium, imageBuffer3, 5);
+            performNewIdeaIteration(imageBuffer3, imageMedium, 5);
+            performNewIdeaIteration(imageMedium, imageBuffer3, 5);
+        }
 
-    // Process the small case:
-    performNewIdeaIteration(imageBig, imageUnchanged, 3);
-    performNewIdeaIteration(imageBuffer, imageBig, 3);
-    performNewIdeaIteration(imageBig, imageBuffer, 3);
-    performNewIdeaIteration(imageBuffer, imageBig, 3);
-    performNewIdeaIteration(imageBig, imageBuffer, 3);
-
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t3);
-    #endif // MEASURE_TIMINGS
+        #pragma omp section
+        {
+            // process the large case
+            performNewIdeaIteration(imageBig, imageUnchanged, 8);
+            performNewIdeaIteration(imageBuffer4, imageBig, 8);
+            performNewIdeaIteration(imageBig, imageBuffer4, 8);
+            performNewIdeaIteration(imageBuffer4, imageBig, 8);
+            performNewIdeaIteration(imageBig, imageBuffer4, 8);
+        }
+    }
 
     // save tiny case result
-    performNewIdeaFinalization(imageSmall, imageBig, imageOut);
+    performNewIdeaFinalization(imageTiny, imageSmall, imageOut);
     if (argc > 1)
     {
         writePPM("flower_tiny.ppm", imageOut);
@@ -366,23 +382,8 @@ main(int argc, char** argv)
         writeStreamPPM(stdout, imageOut);
     }
 
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t4);
-    #endif // MEASURE_TIMINGS
-
-    // Process the medium case:
-    performNewIdeaIteration(imageSmall, imageUnchanged, 5);
-    performNewIdeaIteration(imageBuffer, imageSmall, 5);
-    performNewIdeaIteration(imageSmall, imageBuffer, 5);
-    performNewIdeaIteration(imageBuffer, imageSmall, 5);
-    performNewIdeaIteration(imageSmall, imageBuffer, 5);
-
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t5);
-    #endif // MEASURE_TIMINGS
-
     // save small case
-    performNewIdeaFinalization(imageBig, imageSmall, imageOut);
+    performNewIdeaFinalization(imageSmall, imageMedium, imageOut);
     if (argc > 1)
     {
         writePPM("flower_small.ppm", imageOut);
@@ -392,23 +393,8 @@ main(int argc, char** argv)
         writeStreamPPM(stdout, imageOut);
     }
 
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t6);
-    #endif // MEASURE_TIMINGS
-
-    // process the large case
-    performNewIdeaIteration(imageBig, imageUnchanged, 8);
-    performNewIdeaIteration(imageBuffer, imageBig, 8);
-    performNewIdeaIteration(imageBig, imageBuffer, 8);
-    performNewIdeaIteration(imageBuffer, imageBig, 8);
-    performNewIdeaIteration(imageBig, imageBuffer, 8);
-
-    #if MEASURE_TIMINGS
-    clock_gettime(CLOCK_MONOTONIC, &t7);
-    #endif // MEASURE_TIMINGS
-
     // save the medium case
-    performNewIdeaFinalization(imageSmall, imageBig, imageOut);
+    performNewIdeaFinalization(imageMedium, imageBig, imageOut);
     if (argc > 1)
     {
         writePPM("flower_medium.ppm", imageOut);
@@ -420,23 +406,19 @@ main(int argc, char** argv)
 
     // free all memory structures
     freeImage(imageUnchanged);
-    freeImage(imageBuffer);
+    freeImage(imageBuffer1);
+    freeImage(imageBuffer2);
+    freeImage(imageBuffer3);
+    freeImage(imageBuffer4);
+    freeImage(imageTiny);
     freeImage(imageSmall);
+    freeImage(imageMedium);
     freeImage(imageBig);
     free(imageOut->data);
     free(imageOut);
     free(image->data);
     free(image);
 
-    #if MEASURE_TIMINGS
-    #define NSECS(t) (t.tv_sec * 1000000000LL + t.tv_nsec)
-
-    printf("%lld %lld %lld %lld\n",
-           NSECS(t2) - NSECS(t1),
-           NSECS(t3) - NSECS(t2),
-           NSECS(t5) - NSECS(t4),
-           NSECS(t7) - NSECS(t6));
-    #endif
-
     return 0;
 }
+
