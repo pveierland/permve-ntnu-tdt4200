@@ -1,0 +1,32 @@
+\input{../../templates/assignment.tex}
+
+\title{	
+\normalfont \normalsize 
+\textsc{Norwegian University of Science and Technology\\TDT4200 -- Parallel Computing} \\ [25pt]
+\horrule{0.5pt} \\[0.4cm]
+\huge Problem Set 7:\\ Parallelization\\
+\horrule{2pt} \\[0.5cm]
+}
+
+\author{Per Magnus Veierland\\permve@stud.ntnu.no}
+
+\setlist[enumerate,1]{label=\emph{\alph*})}
+\setlist[enumerate,2]{label=\roman*)}
+\setlist[enumerate,3]{label=\arabic*)}
+
+\date{\normalsize\today}
+
+\begin{document}
+
+\maketitle
+
+To determine whether it is necessary to apply parallelism within the \texttt{performNewIdeaIteration} function, or if it is possible to handle the parallelism outside this function, initial timing measurements were performed. The \texttt{main} function has four sections of code calling \texttt{performNewIdeaIteration}. Measuring the time it takes to execute each of these sections using \texttt{pclock_gettime(CLOCK\_MONOTONIC)} and averaging the timings from 5 runs on an \textsc{ITS015} machine after warming the system caches yields the following values:
+
+\begin{displaymath}
+86.199800~\text{ms} 80.838335~\text{ms} 82.280961~\text{ms} 81.698863~\text{ms}
+\end{displaymath}
+
+The averaged measurements for each code section has a standard deviation of 2~ms, which is about 2.5\% of their mean value, which shows that the sections take about the same time to execute.
+
+\end{document}
+
