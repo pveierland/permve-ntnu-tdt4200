@@ -5,6 +5,10 @@
 #include <omp.h>
 #include "ppm.h"
 
+#if MEASURE_TIMINGS
+#include <time.h>
+#endif // MEASURE_TIMINGS
+
 // Image from:
 // http://7-themes.com/6971875-funny-flowers-pictures.html
 typedef struct
@@ -324,6 +328,11 @@ main(int argc, char** argv)
     imageOut = (PPMImage*)malloc(sizeof(PPMImage));
     imageOut->data = (PPMPixel*)malloc(image->x * image->y * sizeof(PPMPixel));
 
+    #if MEASURE_TIMINGS
+    struct timespec t1, t2, t3, t4, t5, t6, t7;
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    #endif // MEASURE_TIMINGS
+
     // Process the tiny case:
     performNewIdeaIteration(imageSmall, imageUnchanged, 2);
     performNewIdeaIteration(imageBuffer, imageSmall, 2);
@@ -331,12 +340,20 @@ main(int argc, char** argv)
     performNewIdeaIteration(imageBuffer, imageSmall, 2);
     performNewIdeaIteration(imageSmall, imageBuffer, 2);
 
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t2);
+    #endif // MEASURE_TIMINGS
+
     // Process the small case:
     performNewIdeaIteration(imageBig, imageUnchanged, 3);
     performNewIdeaIteration(imageBuffer, imageBig, 3);
     performNewIdeaIteration(imageBig, imageBuffer, 3);
     performNewIdeaIteration(imageBuffer, imageBig, 3);
     performNewIdeaIteration(imageBig, imageBuffer, 3);
+
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t3);
+    #endif // MEASURE_TIMINGS
 
     // save tiny case result
     performNewIdeaFinalization(imageSmall, imageBig, imageOut);
@@ -349,12 +366,20 @@ main(int argc, char** argv)
         writeStreamPPM(stdout, imageOut);
     }
 
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t4);
+    #endif // MEASURE_TIMINGS
+
     // Process the medium case:
     performNewIdeaIteration(imageSmall, imageUnchanged, 5);
     performNewIdeaIteration(imageBuffer, imageSmall, 5);
     performNewIdeaIteration(imageSmall, imageBuffer, 5);
     performNewIdeaIteration(imageBuffer, imageSmall, 5);
     performNewIdeaIteration(imageSmall, imageBuffer, 5);
+
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t5);
+    #endif // MEASURE_TIMINGS
 
     // save small case
     performNewIdeaFinalization(imageBig, imageSmall, imageOut);
@@ -367,12 +392,20 @@ main(int argc, char** argv)
         writeStreamPPM(stdout, imageOut);
     }
 
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t6);
+    #endif // MEASURE_TIMINGS
+
     // process the large case
     performNewIdeaIteration(imageBig, imageUnchanged, 8);
     performNewIdeaIteration(imageBuffer, imageBig, 8);
     performNewIdeaIteration(imageBig, imageBuffer, 8);
     performNewIdeaIteration(imageBuffer, imageBig, 8);
     performNewIdeaIteration(imageBig, imageBuffer, 8);
+
+    #if MEASURE_TIMINGS
+    clock_gettime(CLOCK_MONOTONIC, &t7);
+    #endif // MEASURE_TIMINGS
 
     // save the medium case
     performNewIdeaFinalization(imageSmall, imageBig, imageOut);
@@ -394,6 +427,16 @@ main(int argc, char** argv)
     free(imageOut);
     free(image->data);
     free(image);
+
+    #if MEASURE_TIMINGS
+    #define NSECS(t) (t.tv_sec * 1000000000LL + t.tv_nsec)
+
+    printf("%lld %lld %lld %lld\n",
+           NSECS(t2) - NSECS(t1),
+           NSECS(t3) - NSECS(t2),
+           NSECS(t5) - NSECS(t4),
+           NSECS(t7) - NSECS(t6));
+    #endif
 
     return 0;
 }
