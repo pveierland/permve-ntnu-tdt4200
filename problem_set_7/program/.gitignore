@@ -1,5 +1,6 @@
 *.ppm
 checker
 newImageIdeaGPU
+newImageIdeaMPI
 newImageIdeaOMP
 newImageIdeaReference

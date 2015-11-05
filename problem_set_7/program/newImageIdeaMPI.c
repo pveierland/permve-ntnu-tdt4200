@@ -34,7 +34,7 @@ AccurateImage *convertImageToNewFormat(PPMImage *image) {
 	}
 	imageAccurate->x = image->x;
 	imageAccurate->y = image->y;
-	
+
 	return imageAccurate;
 }
 
@@ -44,14 +44,17 @@ AccurateImage *createEmptyImage(PPMImage *image){
 	imageAccurate->data = (AccuratePixel*)malloc(image->x * image->y * sizeof(AccuratePixel));
 	imageAccurate->x = image->x;
 	imageAccurate->y = image->y;
-	
+
 	return imageAccurate;
 }
 
 // free memory of an AccurateImage
 void freeImage(AccurateImage *image){
-	free(image->data);
-	free(image);
+    if (image)
+    {
+        free(image->data);
+    }
+    free(image);
 }
 
 // Perform the new idea:
@@ -103,7 +106,7 @@ void performNewIdeaIteration(AccurateImage *imageOut, AccurateImage *imageIn,int
 				line_buffer[i].blue-=imageIn->data[numberOfValuesInEachRow*(starty-1)+i].blue;
 				line_buffer[i].red-=imageIn->data[numberOfValuesInEachRow*(starty-1)+i].red;
 				line_buffer[i].green-=imageIn->data[numberOfValuesInEachRow*(starty-1)+i].green;
-			}	
+			}
 		}else{
 			// general case
 			// add the next line and remove the first added line
@@ -111,9 +114,9 @@ void performNewIdeaIteration(AccurateImage *imageOut, AccurateImage *imageIn,int
 				line_buffer[i].blue+=imageIn->data[numberOfValuesInEachRow*endy+i].blue-imageIn->data[numberOfValuesInEachRow*(starty-1)+i].blue;
 				line_buffer[i].red+=imageIn->data[numberOfValuesInEachRow*endy+i].red-imageIn->data[numberOfValuesInEachRow*(starty-1)+i].red;
 				line_buffer[i].green+=imageIn->data[numberOfValuesInEachRow*endy+i].green-imageIn->data[numberOfValuesInEachRow*(starty-1)+i].green;
-			}	
+			}
 		}
-		
+
 		sum_green =0;
 		sum_red = 0;
 		sum_blue = 0;
@@ -145,7 +148,7 @@ void performNewIdeaIteration(AccurateImage *imageOut, AccurateImage *imageIn,int
 				sum_red += (line_buffer[endx].red-line_buffer[startx-1].red);
 				sum_green += (line_buffer[endx].green-line_buffer[startx-1].green);
 				sum_blue += (line_buffer[endx].blue-line_buffer[startx-1].blue);
-			}			
+			}
 
 			// we save each pixel in the output image
 			offsetOfThePixel = (numberOfValuesInEachRow * senterY + senterX);
@@ -159,7 +162,7 @@ void performNewIdeaIteration(AccurateImage *imageOut, AccurateImage *imageIn,int
 	}
 
 	// free memory
-	free(line_buffer);	
+	free(line_buffer);
 }
 
 // Perform the final step, and save it as a ppm in imageOut
@@ -185,7 +188,7 @@ void performNewIdeaFinalization(AccurateImage *imageInSmall, AccurateImage *imag
 		}  else {
 			imageOut->data[i].red = floorf(value);
 		}
-		
+
 		value = (imageInLarge->data[i].green - imageInSmall->data[i].green);
 		if(value > 255.0f)
 			imageOut->data[i].green = 255;
@@ -200,7 +203,7 @@ void performNewIdeaFinalization(AccurateImage *imageInSmall, AccurateImage *imag
 		} else {
 			imageOut->data[i].green = floorf(value);
 		}
-		
+
 		value = (imageInLarge->data[i].blue - imageInSmall->data[i].blue);
 		if(value > 255.0f)
 			imageOut->data[i].blue = 255;
@@ -219,77 +222,83 @@ void performNewIdeaFinalization(AccurateImage *imageInSmall, AccurateImage *imag
 
 }
 
+int main(int argc, char** argv)
+{
+    MPI_Init(&argc, &argv);
 
-int main(int argc, char** argv) {
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-	// All use of MPI can be in this function
-	// Process the four cases in parallel
-	// Exchanging image buffers gives quite big messages
-	// Use asynchronous MPI to post the receives ahead of the sends
-	PPMImage *image;
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-	// The MPI version will always read from file
-	image = readPPM("flower.ppm");
+    PPMImage* image_input = readPPM("flower.ppm");
 
-	AccurateImage *imageUnchanged = convertImageToNewFormat(image); // save the unchanged image from input image
-	AccurateImage *imageBuffer = createEmptyImage(image);
-	AccurateImage *imageSmall = createEmptyImage(image);
-	AccurateImage *imageBig = createEmptyImage(image);
-	
-	PPMImage *imageOut;
-	imageOut = (PPMImage *)malloc(sizeof(PPMImage));
-	imageOut->data = (PPMPixel*)malloc(image->x * image->y * sizeof(PPMPixel));
+    MPI_Request receive_request;
+    AccurateImage* image_receive = NULL;
 
-	// Process the tiny case:
-	performNewIdeaIteration(imageSmall, imageUnchanged, 2);
-	performNewIdeaIteration(imageBuffer, imageSmall, 2);
-	performNewIdeaIteration(imageSmall, imageBuffer, 2);
-	performNewIdeaIteration(imageBuffer, imageSmall, 2);
-	performNewIdeaIteration(imageSmall, imageBuffer, 2);
-	
-	// Process the small case:
-	performNewIdeaIteration(imageBig, imageUnchanged,3);
-	performNewIdeaIteration(imageBuffer, imageBig,3);
-	performNewIdeaIteration(imageBig, imageBuffer,3);
-	performNewIdeaIteration(imageBuffer, imageBig,3);
-	performNewIdeaIteration(imageBig, imageBuffer,3);
-	
-	// save tiny case result
-	performNewIdeaFinalization(imageSmall,  imageBig, imageOut);
-	writePPM("flower_tiny.ppm", imageOut);
+    if (world_rank < world_size - 1)
+    {
+        // Asynchronously receive image from higher rank
+        image_receive = createEmptyImage(image_input);
+        MPI_Irecv(image_receive->data, 3 * image_input->x * image_input->y,
+                  MPI_FLOAT, world_rank + 1, 0, MPI_COMM_WORLD, &receive_request);
+    }
 
-	
-	// Process the medium case:
-	performNewIdeaIteration(imageSmall, imageUnchanged, 5);
-	performNewIdeaIteration(imageBuffer, imageSmall, 5);
-	performNewIdeaIteration(imageSmall, imageBuffer, 5);
-	performNewIdeaIteration(imageBuffer, imageSmall, 5);
-	performNewIdeaIteration(imageSmall, imageBuffer, 5);
-	
-	// save small case
-	performNewIdeaFinalization(imageBig,  imageSmall,imageOut);
-	writePPM("flower_small.ppm", imageOut);
+    // Process own image
+    AccurateImage* image_a = createEmptyImage(image_input);
+	AccurateImage* image_b = convertImageToNewFormat(image_input);
 
-	// process the large case
-	performNewIdeaIteration(imageBig, imageUnchanged, 8);
-	performNewIdeaIteration(imageBuffer, imageBig, 8);
-	performNewIdeaIteration(imageBig, imageBuffer, 8);
-	performNewIdeaIteration(imageBuffer, imageBig, 8);
-	performNewIdeaIteration(imageBig, imageBuffer, 8);
+    const int filter_sizes[] = { 2, 3, 5, 8 };
+    const int filter_size    = filter_sizes[world_rank];
 
-	// save the medium case
-	performNewIdeaFinalization(imageSmall,  imageBig, imageOut);
-	writePPM("flower_medium.ppm", imageOut);
-	
-	// free all memory structures
-	freeImage(imageUnchanged);
-	freeImage(imageBuffer);
-	freeImage(imageSmall);
-	freeImage(imageBig);
-	free(imageOut->data);
-	free(imageOut);
-	free(image->data);
-	free(image);
-	
+    performNewIdeaIteration(image_a, image_b, filter_size);
+    performNewIdeaIteration(image_b, image_a, filter_size);
+    performNewIdeaIteration(image_a, image_b, filter_size);
+    performNewIdeaIteration(image_b, image_a, filter_size);
+    performNewIdeaIteration(image_a, image_b, filter_size);
+
+    MPI_Request send_request;
+    if (world_rank > 0)
+    {
+        // Send image to lower rank
+        MPI_Issend(image_a->data, 3 * image_a->x * image_a->y,
+                   MPI_FLOAT, world_rank - 1, 0, MPI_COMM_WORLD, &send_request);
+    }
+
+    if (world_rank < world_size - 1)
+    {
+        const char* output_file_names[] = {
+            "flower_tiny.ppm", "flower_small.ppm", "flower_medium.ppm" };
+
+        PPMImage image_output;
+        image_output.data = (PPMPixel*)malloc(
+            image_input->x * image_input->y * sizeof(PPMPixel));
+
+        // Wait for receive from higher rank to complete
+        MPI_Wait(&receive_request, MPI_STATUS_IGNORE);
+
+        performNewIdeaFinalization(image_a, image_receive, &image_output);
+        writePPM(output_file_names[world_rank], &image_output);
+
+        free(image_output.data);
+    }
+
+    if (world_rank > 0)
+    {
+        // Wait for send to complete before quitting
+        MPI_Wait(&send_request, MPI_STATUS_IGNORE);
+    }
+
+    freeImage(image_a);
+    freeImage(image_b);
+    freeImage(image_receive);
+
+	free(image_input->data);
+	free(image_input);
+
+    MPI_Finalize();
+
 	return 0;
 }
+
