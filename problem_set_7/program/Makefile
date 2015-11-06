@@ -2,7 +2,7 @@
 
 all: newImageIdeaOMP newImageIdeaMPI newImageIdeaGPU newImageIdeaReference
 
-CUDAFLAGS:=--compiler-bindir gcc-4.8 -lm
+CUDAFLAGS:=-Xptxas="-v" --compiler-bindir g++-4.8 -lm
 
 ppm.o: ppm.c
 	gcc -O2 -march=native --std=c99 $< -o $@ -c
