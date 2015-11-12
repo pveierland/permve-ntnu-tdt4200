@@ -1,6 +1,7 @@
 #include <stdexcept>
 #include <string>
 #include <iostream>
+#include <sstream>
 
 #include <stdint.h>
 
@@ -25,7 +26,12 @@ cuda_assert(cudaError_t error, const char* file, const int line, const char* fun
 {
     if (error)
     {
-        throw std::runtime_error(std::string(function) + " failed: " + cudaGetErrorString(error));
+        std::ostringstream oss;
+        oss << "CUDA function "
+            << function
+            << " (" << file << ":" << line << ") "
+            << "failed: " << cudaGetErrorString(error);
+        throw std::runtime_error(oss.str());
     }
 }
 
@@ -39,6 +45,78 @@ cuda_assert(cudaError_t error, const char* file, const int line, const char* fun
 // TODO: You should implement this
 //__global__ void performNewIdeaFinalizationGPU( ... ) { ... }
 
+/*
+__device__ inline
+unsigned char
+computeFinalPixelValue(float value)
+{
+    if(value > 255.0f)
+        return 255;
+    else if (value < -1.0f) {
+        value += 257.0f;
+
+    if (value > 255.0f)
+        return 255;
+    else
+        return (unsigned char)floorf(value);
+    } else if (value > -1.0f && value < 0.0f) {
+        return 0;
+    } else {
+        return (unsigned char)floorf(value);
+    }
+}
+*/
+
+
+template <int tile_size, int filter_size>
+__global__
+void
+performNewIdeaIterationGPU(float* const image, const int image_width)
+{
+    __shared__ float s[tile_size + 2 * filter_size][3];
+
+    const int column_index          = tile_size * blockIdx.x - filter_size + threadIdx.x;
+    const int row_index             = image_width * blockIdx.y;
+    const int is_valid_column_index = column_index >= 0 && column_index < image_width;
+
+//    printf("column_index = %3d row_index = %3d is_valid_column_index = %d\n", column_index, row_index, is_valid_column_index);
+
+    // Load pixel value into shared memory
+    const int pixel_offset = 3 * (row_index + column_index);
+    s[threadIdx.x][0] = is_valid_column_index ? image[pixel_offset + 0] : 0;
+    s[threadIdx.x][1] = is_valid_column_index ? image[pixel_offset + 1] : 0;
+    s[threadIdx.x][2] = is_valid_column_index ? image[pixel_offset + 2] : 0;
+
+    __syncthreads();
+
+    // Do filtering
+
+    if (threadIdx.x >= filter_size && threadIdx.x < blockDim.x - filter_size)
+    {
+        //int start = max(column_index - filter_size, 0);
+        //int end   = min(column_index + filter_size, image_width - 1);
+
+        //float sum[3] = { 0 };
+
+        //for (int i = start; i <= end; ++i)
+        //{
+        //    sum[0] += s[i][0];
+        //    sum[1] += s[i][1];
+        //    sum[2] += s[i][2];
+        //}
+
+        const int num_filtered_pixels = end - start + 1;
+
+        //image[pixel_offset + 0] = sum[0] / num_filtered_pixels;
+        //image[pixel_offset + 1] = sum[1] / num_filtered_pixels;
+        //image[pixel_offset + 2] = sum[2] / num_filtered_pixels;
+
+        image[pixel_offset + 0] = 0.0f;
+        image[pixel_offset + 1] = 128.0f;
+        image[pixel_offset + 2] = 255.0f;
+    }
+}
+
 __device__ inline
 unsigned char
 computeFinalPixelValue(float value)
@@ -50,43 +128,24 @@ computeFinalPixelValue(float value)
     return (unsigned char)(floorf(min(max(value, 0.0f), 255.0f)));
 }
 
-// Image must have width divisible by 8 pixels
+// performNewIdeaFinalizationGPU requires that image has width divisible by 4
 __global__
 void
 performNewIdeaFinalizationGPU(
-    const int            image_width,
-    float* const         image_input_small,
-    float* const         image_input_large,
-    std::uint64_t* const image_output)
+    const int      image_width,
+    float* const   image_input_small,
+    float* const   image_input_large,
+    uint8_t* const image_output)
 {
-    const int offset = blockIdx.x * image_width * 24 + 24 * threadIdx.x;
+    const int offset = blockIdx.x * image_width * 3 /* values per pixel */
+                     + threadIdx.x * 4 /* pixels per thread */ * 3 /* values per pixel */;
 
-    // Input:  24 * float values = 24 * 4 bytes = 96 bytes (8 bytes * 12)
-    // Output: 24 bytes (8 bytes * 3)
-    for (int i = 0; i < 24; ++i)
+    for (int i = 0; i != 12; ++i)
     {
-        image_output[offset + i] = computeFinalPixelValue(
-            image_input_large[offset + i] - image_input_small[offset + i]);
+        image_output[offset + i] = computeFinalPixelValue(image_input_small[offset + i]);
+        //image_output[offset + i] = computeFinalPixelValue(image_input_large[offset + i] - image_input_small[offset + i]);
     }
-
-    const int output_offset = blockIdx.x * image_width + threadIdx.x;
-
-    image_output[offset + 0] = (computeFinalPixelValue(image_input_large[offset + 0] - image_input_small[offset + 0]) << 56) |
-                               (computeFinalPixelValue(image_input_large[offset + 1] - image_input_small[offset + 1]) << 48) |
-                               (computeFinalPixelValue(image_input_large[offset + 2] - image_input_small[offset + 2]) << 40) |
-                               (computeFinalPixelValue(image_input_large[offset + 3] - image_input_small[offset + 3]) << 32) |
-                               (computeFinalPixelValue(image_input_large[offset + 4] - image_input_small[offset + 4]) << 24) |
-                               (computeFinalPixelValue(image_input_large[offset + 5] - image_input_small[offset + 5]) << 16) |
-                               (computeFinalPixelValue(image_input_large[offset + 6] - image_input_small[offset + 6]) <<  8) |
-                               (computeFinalPixelValue(image_input_large[offset + 7] - image_input_small[offset + 7]) <<  0);
-
 }
-
-// TODO: You should implement this
-//__global__ void convertImageToNewFormatGPU( ... ) { ... }
-
-// Perhaps some extra kernels will be practical as well?
-//__global__ void ...GPU( ... ) { ... }
 
 typedef struct {
      float red,green,blue;
@@ -96,6 +155,13 @@ typedef struct {
      int x, y;
      AccuratePixel *data;
 } AccurateImage;
+
+// TODO: You should implement this
+//__global__ void convertImageToNewFormatGPU( ... ) { ... }
+
+// Perhaps some extra kernels will be practical as well?
+//__global__ void ...GPU( ... ) { ... }
+
 
 // Convert a PPM image to a high-precision format
 AccurateImage *convertImageToNewFormat(PPMImage *image) {
@@ -290,7 +356,7 @@ int main(int argc, char** argv) {
 	} else {
 		image = readStreamPPM(stdin);
 	}
-    
+
     std::cout << "P" << std::endl;
 
     const int pixels_in_image = image->x * image->y;
@@ -302,7 +368,7 @@ int main(int argc, char** argv) {
 
     cuda_call(cudaMalloc, &device_image_a, pixels_in_image * bytes_per_pixel);
     cuda_call(cudaMalloc, &device_image_b, pixels_in_image * bytes_per_pixel);
-    cuda_call(cudaMalloc, &device_image_output, pixels_in_image);
+    cuda_call(cudaMalloc, &device_image_output, 3 * pixels_in_image);
 
 	AccurateImage *imageUnchanged = convertImageToNewFormat(image); // save the unchanged image from input image
 	AccurateImage *imageBuffer = createEmptyImage(image);
@@ -317,44 +383,76 @@ int main(int argc, char** argv) {
 
     std::cout << "E" << std::endl;
 
-	// Process the tiny case:
-	performNewIdeaIteration(imageSmall, imageUnchanged, 2);
-	performNewIdeaIteration(imageBuffer, imageSmall, 2);
-	performNewIdeaIteration(imageSmall, imageBuffer, 2);
-	performNewIdeaIteration(imageBuffer, imageSmall, 2);
-	performNewIdeaIteration(imageSmall, imageBuffer, 2);
+    cuda_call(cudaMemcpy, device_image_a, imageUnchanged->data,
+              pixels_in_image * bytes_per_pixel, cudaMemcpyHostToDevice);
 
-	// Process the small case:
-	performNewIdeaIteration(imageBig, imageUnchanged,3);
-	performNewIdeaIteration(imageBuffer, imageBig,3);
-	performNewIdeaIteration(imageBig, imageBuffer,3);
-	performNewIdeaIteration(imageBuffer, imageBig,3);
-	performNewIdeaIteration(imageBig, imageBuffer,3);
-    
+    #define TILE_WIDTH 30
+    dim3 grid_size(1920 / TILE_WIDTH, 1200);
+    dim3 block_size(TILE_WIDTH + 2 * 5);
+
+    #define performNewIdeaIterationGPU_template performNewIdeaIterationGPU<TILE_WIDTH, 5>
+
+    cuda_launch(performNewIdeaIterationGPU_template, grid_size, block_size, device_image_a, 1920);
+
+//	// Process the tiny case:
+//	performNewIdeaIteration(imageSmall, imageUnchanged, 2);
+//	performNewIdeaIteration(imageBuffer, imageSmall, 2);
+//	performNewIdeaIteration(imageSmall, imageBuffer, 2);
+//	performNewIdeaIteration(imageBuffer, imageSmall, 2);
+//	performNewIdeaIteration(imageSmall, imageBuffer, 2);
+//
+//	// Process the small case:
+//	performNewIdeaIteration(imageBig, imageUnchanged,3);
+//	performNewIdeaIteration(imageBuffer, imageBig,3);
+//	performNewIdeaIteration(imageBig, imageBuffer,3);
+//	performNewIdeaIteration(imageBuffer, imageBig,3);
+//	performNewIdeaIteration(imageBig, imageBuffer,3);
+
     std::cout << "N " << device_image_a << std::endl;
 
-    cuda_call(cudaMemcpy, device_image_a, imageSmall->data,
-              pixels_in_image * bytes_per_pixel, cudaMemcpyHostToDevice);
-    
+
     std::cout << "X" << std::endl;
 
-    cuda_call(cudaMemcpy, device_image_b, imageBig->data,
-              pixels_in_image * bytes_per_pixel, cudaMemcpyHostToDevice);
-    
+//    cuda_call(cudaMemcpy, device_image_b, imageBig->data,
+//              pixels_in_image * bytes_per_pixel, cudaMemcpyHostToDevice);
+
     std::cout << "Y" << std::endl;
 
-    cuda_launch(performNewIdeaFinalizationGPU, 200, 240,
+    cuda_launch(performNewIdeaFinalizationGPU, 1200, 480,
                 1920, device_image_a, device_image_b, device_image_output);
-    
+
     std::cout << "Z" << std::endl;
 
     cuda_call(cudaMemcpy,
               imageOut->data,
               device_image_output,
-              pixels_in_image,
+              3 * pixels_in_image,
               cudaMemcpyDeviceToHost);
-    
+
     std::cout << "1" << std::endl;
+
+    //PPMImage* fresh = performNewIdeaFinalization(imageSmall, imageBig);
+
+    //for (int i = 0; i != pixels_in_image; ++i) {
+    //    if (imageOut->data[i].red != fresh->data[i].red) {
+    //        printf("NO MATCH %d", i);
+    //        break;
+    //    }
+    //}
+
+    //printf("\nHost output:\n");
+
+    //for (int i = 0; i != 16; ++i)
+    //{
+    //    printf("0x%02X ", ((unsigned char*) imageOut->data)[i]);
+    //}
+    //printf("\n");
+
+    //for (int i = 0; i != 16; ++i)
+    //{
+    //    printf("0x%02X ", ((unsigned char*) fresh->data)[i]);
+    //}
+    //printf("\n");
 
 	if(argc > 1) {
 		writePPM("flower_tiny.ppm", imageOut);
@@ -389,7 +487,7 @@ int main(int argc, char** argv) {
 //	} else {
 //		writeStreamPPM(stdout, imageOut);
 //	}
-//    
+//
 //    std::cout << "5" << std::endl;
 //
 //	// process the large case
