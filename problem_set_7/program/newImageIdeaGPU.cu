@@ -67,6 +67,8 @@ computeFinalPixelValue(float value)
 }
 */
 
+#define MAXWTF(a, b) (((a)>(b))?(a):(b))
+#define MINWTF(a, b) (((a)<(b))?(a):(b))
 
 template <int tile_size, int filter_size>
 __global__
@@ -75,46 +77,51 @@ performNewIdeaIterationGPU(float* const image, const int image_width)
 {
     __shared__ float s[tile_size + 2 * filter_size][3];
 
-    const int column_index          = tile_size * blockIdx.x - filter_size + threadIdx.x;
-    const int row_index             = image_width * blockIdx.y;
-    const int is_valid_column_index = column_index >= 0 && column_index < image_width;
-
-//    printf("column_index = %3d row_index = %3d is_valid_column_index = %d\n", column_index, row_index, is_valid_column_index);
+    const int horizontal_tile_offset           = tile_size * blockIdx.x;
+    const int horizontal_column_index          = horizontal_tile_offset - filter_size + threadIdx.x;
+    const int horizontal_row_index             = image_width * blockIdx.y;
+    const int is_horizontal_column_index_valid = horizontal_column_index >= 0 && horizontal_column_index < image_width;
 
     // Load pixel value into shared memory
-    const int pixel_offset = 3 * (row_index + column_index);
-    s[threadIdx.x][0] = is_valid_column_index ? image[pixel_offset + 0] : 0;
-    s[threadIdx.x][1] = is_valid_column_index ? image[pixel_offset + 1] : 0;
-    s[threadIdx.x][2] = is_valid_column_index ? image[pixel_offset + 2] : 0;
+    const int pixel_offset = 3 * (horizontal_row_index + horizontal_column_index);
+
+    s[threadIdx.x][0] = is_horizontal_column_index_valid ? image[pixel_offset + 0] : 0;
+    s[threadIdx.x][1] = is_horizontal_column_index_valid ? image[pixel_offset + 1] : 0;
+    s[threadIdx.x][2] = is_horizontal_column_index_valid ? image[pixel_offset + 2] : 0;
 
     __syncthreads();
 
-    // Do filtering
+    // Apply horizontal filter
 
     if (threadIdx.x >= filter_size && threadIdx.x < blockDim.x - filter_size)
     {
-        //int start = max(column_index - filter_size, 0);
-        //int end   = min(column_index + filter_size, image_width - 1);
+        int start = max(horizontal_column_index - filter_size, 0) - horizontal_tile_offset + filter_size;
+        int end   = min(horizontal_column_index + filter_size, image_width - 1) - horizontal_tile_offset + filter_size;
 
-        //float sum[3] = { 0 };
+        float sum[3] = { 0.0f, 0.0f, 0.0f };
 
-        //for (int i = start; i <= end; ++i)
-        //{
-        //    sum[0] += s[i][0];
-        //    sum[1] += s[i][1];
-        //    sum[2] += s[i][2];
-        //}
+        for (int i = start; i <= end; ++i)
+        {
+            sum[0] += s[i][0];
+            sum[1] += s[i][1];
+            sum[2] += s[i][2];
+        }
 
         const int num_filtered_pixels = end - start + 1;
 
-        //image[pixel_offset + 0] = sum[0] / num_filtered_pixels;
-        //image[pixel_offset + 1] = sum[1] / num_filtered_pixels;
-        //image[pixel_offset + 2] = sum[2] / num_filtered_pixels;
-
-        image[pixel_offset + 0] = 0.0f;
-        image[pixel_offset + 1] = 128.0f;
-        image[pixel_offset + 2] = 255.0f;
+        image[pixel_offset + 0] = sum[0] / ((float) num_filtered_pixels);
+        image[pixel_offset + 1] = sum[1] / ((float) num_filtered_pixels);
+        image[pixel_offset + 2] = sum[2] / ((float) num_filtered_pixels);
     }
+
+    // Wait for global writes to complete
+    __syncthreads();
+
+    // Load pixel value into shared memory
+
+    const int vertical_tile_offset = tile_size * blockIdx.y;
+    const int vertical_column_index = 
+
 }
 
 __device__ inline
@@ -386,13 +393,22 @@ int main(int argc, char** argv) {
     cuda_call(cudaMemcpy, device_image_a, imageUnchanged->data,
               pixels_in_image * bytes_per_pixel, cudaMemcpyHostToDevice);
 
+    #define FILTER_SIZE 10
     #define TILE_WIDTH 30
     dim3 grid_size(1920 / TILE_WIDTH, 1200);
-    dim3 block_size(TILE_WIDTH + 2 * 5);
+    dim3 block_size(TILE_WIDTH + 2 * FILTER_SIZE);
 
-    #define performNewIdeaIterationGPU_template performNewIdeaIterationGPU<TILE_WIDTH, 5>
+    #define performNewIdeaIterationGPU_template performNewIdeaIterationGPU<TILE_WIDTH, FILTER_SIZE>
 
     cuda_launch(performNewIdeaIterationGPU_template, grid_size, block_size, device_image_a, 1920);
+
+//    #define TILE_WIDTH 30
+//    dim3 grid_size(1920 / TILE_WIDTH, 1200);
+//    dim3 block_size(TILE_WIDTH + 2 * 5);
+//
+//    #define performNewIdeaIterationGPU_template performNewIdeaIterationGPU<TILE_WIDTH, 5>
+//
+//    cuda_launch(performNewIdeaIterationGPU_template, 1, block_size, device_image_a, 1920);
 
 //	// Process the tiny case:
 //	performNewIdeaIteration(imageSmall, imageUnchanged, 2);
