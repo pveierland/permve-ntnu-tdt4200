@@ -1,4 +1,6 @@
-\input{../../templates/assignment.tex}
+\input{../../../permve-ntnu-latex/assignment.tex}
+
+\usepackage[htt]{hyphenat}
 
 \title{	
 \normalfont \normalsize 
@@ -16,17 +18,91 @@
 
 \date{\normalsize\today}
 
+\newacro{CMB}{Climbing Mont Blanc}
+\newacro{CUDA}{Compute Unified Device Architecture}
+\newacro{GPU}{Graphics Processing Unit}
+\newacro{MPI}{Message Passing Interface}
+\newacro{OMP}{OpenMP}
+\newacro{PPM}{Portable Pixel Map}
+
 \begin{document}
 
 \maketitle
 
-To determine whether it is necessary to apply parallelism within the \texttt{performNewIdeaIteration} function, or if it is possible to handle the parallelism outside this function, initial timing measurements were performed. The \texttt{main} function has four sections of code calling \texttt{performNewIdeaIteration}. Measuring the time it takes to execute each of these sections using \texttt{pclock_gettime(CLOCK\_MONOTONIC)} and averaging the timings from 5 runs on an \textsc{ITS015} machine after warming the system caches yields the following values:
+\section*{\ac{MPI}}
 
-\begin{displaymath}
-86.199800~\text{ms} 80.838335~\text{ms} 82.280961~\text{ms} 81.698863~\text{ms}
-\end{displaymath}
+To determine whether it is necessary to apply parallelism within the \texttt{performNewIdeaIteration} function, or if it is possible to handle the parallelism outside this function, initial timing measurements were performed. The \texttt{main} function has four sections of code calling \texttt{performNewIdeaIteration}. Measuring the time it takes to execute each of these sections using \texttt{clock\_gettime(CLOCK\_MONOTONIC)} and averaging the timings from 5 runs on an \textsc{ITS015} machine after warming the system caches yields the values shown in Table~\ref{table:mpiz}.
+
+\begin{table}
+\centering
+\begin{tabular}{cc}
+\toprule
+Section & Time \\
+\midrule
+1 & 86.200~ms \\
+2 & 80.838~ms \\
+3 & 82.281~ms \\
+4 & 81.699~ms\\
+\bottomrule
+\end{tabular}
+\caption{\texttt{performNewIdeaIteration} section timings}
+\label{table:mpiz}
+\end{table}
 
 The averaged measurements for each code section has a standard deviation of 2~ms, which is about 2.5\% of their mean value, which shows that the sections take about the same time to execute.
+
+The assignment specifies that the program should utilize exactly four \ac{MPI} nodes, which corresponds well to the four filter applications which can be run in parallel. Before each node computes their image filter, all nodes besides the last initiates a non-blocking receive using \texttt{MPI\_Irecv} to receive an image from their upper rank neighbor. Since each node reads the input image individually from disk it is not necessary to communicate the image size, as this is known from reading the image file. After each node has completed their image filtering, all nodes besides the first performs a non-blocking synchronous send, \texttt{MPI\_Issend}, to transmit their filtered image to their lower rank neighbor. Each node besides the last then uses \texttt{MPI\_Wait} to ensure that the filtered image from the upper rank neighbor has been received, before combining the received image with the node's own image to perform the image finalization and write the result to disk. Finally, all ranks beside the first calls \texttt{MPI\_Wait} again to ensure that transmitting their filtered image to the lower neighbor rank has completed before exiting.
+
+\section*{\ac{OMP}}
+
+Initially the first \ac{OMP} version was written with the same labor division as the \ac{MPI} version. Using \ac{OMP} \texttt{section} pragmas the four filters could easily be ran using four different threads. This gave a speedup from 2.74~seconds to 1.46~seconds on \ac{CMB}. However, as it was specified in the recitation notes that the \texttt{main} function was not to be modified, the focus was shifted to the \texttt{performNewIdeaIteration} function.
+
+The solution chosen to parallelize \texttt{performNewIdeaIteration} using \ac{OMP} was to use a \texttt{\#pragma omp parallel} encapsulating the function, letting each resulting \ac{OMP} thread operate on one vertical section of the image according to the following logic:\\
+
+\texttt{int rows\_per\_thread~~= imageIn->y / omp\_get\_num\_threads();\\
+int thread\_row\_start~= omp\_get\_thread\_num() * rows\_per\_thread;\\
+int thread\_row\_end~~~= thread\_row\_start + rows\_per\_thread;
+}\\
+
+Testing this results in interesting output images, as the \texttt{line\_buffer} is not initialized or maintained correctly for each thread. This required minor tweaks to the logic which maintains the \texttt{line\_buffer}. After completing this update the resulting program achieves a speedup from 2.74~seconds to 1.46~seconds on \ac{CMB}.
+
+\section*{\ac{GPU}}
+
+The \ac{CUDA} program implementation utilizes the following three kernels which performs all work besides loading the input image into \ac{PPM} format. All kernels are invoked with the grid dimensions $35 \times 75$; and the block dimensions $64 \times 16$, which are hardcoded for the provided image.
+
+\begin{itemize}
+\item \texttt{convertImageToNewFormatGPU} converts the input \ac{PPM} image, which consists of three bytes for each pixel representing red, green, and blue intensities; and converts byte integer values to floating point values without applying any scaling. The \ac{PPM} image data is copied to the device before this kernel is run.
+\item \texttt{performNewIdeaIterationGPU} performs the filtering operation on the \ac{GPU}. It consists of the serial version of the filtering algorithm, where each \ac{CUDA} thread performs the filtering for one image pixel. The pixel index is calculated as:\\[0.2cm]
+\texttt{int senterY = blockDim.y * blockIdx.y + threadIdx.y;\\
+int senterX = blockDim.x * blockIdx.x + threadIdx.x;}
+\item \texttt{performNewIdeaFinalizationGPU} calculates the difference between the two filtered images which are both in the device memory, placing the resulting \ac{PPM} pixel output in a third device allocation.
+\end{itemize}
+
+\section*{Timings}
+
+\begin{itemize}
+\item
+\texttt{(time mpirun -n 4 ./newImageIdeaMPI 1) \&> time\_mpi.txt\\
+real    0m2.999s
+user    0m1.848s
+sys     0m0.129s
+}
+\item
+\begin{tabular}{ccccl}
+\toprule
+Filename & Time~(s) & Energy(j) & EDP~(js) & Comment \\
+\midrule
+omp\_v4  & 1.46     & 7.64      & 11.15    & \texttt{main} approach \\
+sweet    & 1.46     & 6.17      & 9.01     & \texttt{performNewIdeaIteration} approach \\
+\bottomrule
+\end{tabular}
+\item
+\texttt{(time ./newImageIdeaGPU 1) \&> time\_gpu.txt\\
+real    0m2.898s
+user    0m0.851s
+sys     0m0.256s
+}
+\end{itemize}
 
 \end{document}
 
