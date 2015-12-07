@@ -1,7 +1,7 @@
-\input{../../templates/assignment.tex}
+\input{../../../permve-ntnu-latex/assignment.tex}
 
-\title{	
-\normalfont \normalsize 
+\title{
+\normalfont \normalsize
 \textsc{Norwegian University of Science and Technology\\TDT4200 -- Parallel Computing} \\ [25pt]
 \horrule{0.5pt} \\[0.4cm]
 \huge Problem Set 7:\\ Parallelization\\
@@ -20,13 +20,13 @@
 
 \maketitle
 
-To determine whether it is necessary to apply parallelism within the \texttt{performNewIdeaIteration} function, or if it is possible to handle the parallelism outside this function, initial timing measurements were performed. The \texttt{main} function has four sections of code calling \texttt{performNewIdeaIteration}. Measuring the time it takes to execute each of these sections using \texttt{pclock_gettime(CLOCK\_MONOTONIC)} and averaging the timings from 5 runs on an \textsc{ITS015} machine after warming the system caches yields the following values:
+\section*{MPI}
 
-\begin{displaymath}
-86.199800~\text{ms} 80.838335~\text{ms} 82.280961~\text{ms} 81.698863~\text{ms}
-\end{displaymath}
-
+The parallel MPI implementation is specified to utilize exactly four MPI ranks. In the main function, four separate rounds of filtering is applied; one for each filter size. To determine whether the work performed by these four filters is equal, measuring code was added to the program through the use of \texttt{clock\_gettime(CLOCK\_MONOTONIC)} which returns monotonic time measurements with nanosecond resolution. Averaging timing measurements for the four filter sizes over five runs on an \textsc{ITS015} machine yielded the following values:\\[0.2cm]
+Filter size 5: 86.2~ms\quad Filter size 7: 80.84~ms\quad Filter size 11: 82.28~ms\quad Filter size 17: 81.70~ms\\[0.2cm]
 The averaged measurements for each code section has a standard deviation of 2~ms, which is about 2.5\% of their mean value, which shows that the sections take about the same time to execute.
+
+The work performed by each rank is then to read the source \texttt{flower.ppm} image file and perform filtering for one filter size. Each rank other than the first will then asynchronously transfer its result to the its lower rank neighbor using a non-blocking synchronous send (\texttt{MPI\_Issend}). Each rank other than the last initiates a non-blocking receive (\texttt{MPI\_Irecv}) before computing the filtered image. In the end all receiving ranks waits for the receive to complete using \texttt{MPI\_Wait}, before processing the combined image from their own image and the image received from the rank above, writing the result to the output file.
 
 \end{document}
 
