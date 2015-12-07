@@ -1,0 +1,4 @@
+(time ./newImageIdeaGPU 1) &> time_gpu.txt
+real	0m2.898s
+user	0m0.851s
+sys	0m0.256s

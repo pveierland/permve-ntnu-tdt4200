@@ -1,0 +1,4 @@
+(time mpirun -n 4 ./newImageIdeaMPI 1) &> time_mpi.txt
+real	0m2.999s
+user	0m1.848s
+sys	0m0.129s
